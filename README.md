@@ -13,8 +13,8 @@ Current roles:
 ## Managed Hosts
 | Hostname        | Purpose        | OS                     |
 |-----------------|----------------|------------------------|
-| `portainer-pi`  | Docker + Portainer | Raspberry Pi OS Lite |
-| `codeserver-pi` | Baseline only | Raspberry Pi OS Lite |
+| `portainer-pi`  | Portainer | Raspberry Pi OS Lite |
+| `codeserver-pi` | code-server | Raspberry Pi OS Lite |
 
 ---
 
@@ -69,7 +69,13 @@ Current roles:
 	ansible-playbook -i inventory/hosts.ini playbooks/portainer.yml --ask-become-pass
 	```
 
-5. Reboot manually
+5. Update code-server
+
+	```bash
+	ansible-playbook -i inventory/hosts.ini playbooks/codeserver.yml --tags codeserver_update --ask-become-pass
+	```
+
+6. Reboot manually
 
 	```bash
 	ansible-playbook -i inventory/hosts.ini playbooks/site.yml --ask-become-pass --tags manual_reboot

@@ -1,0 +1,6 @@
+---
+- name: Manage code-server hosts
+  hosts: codeserver
+  gather_facts: true
+  roles:
+    - codeserver

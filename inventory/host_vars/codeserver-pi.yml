@@ -1,0 +1,2 @@
+codeserver_user: pancakes
+codeserver_unit: "code-server@{{ codeserver_user }}"

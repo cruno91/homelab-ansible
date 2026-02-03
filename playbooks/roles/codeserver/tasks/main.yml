@@ -1,0 +1,44 @@
+---
+- name: Ensure curl is installed
+  ansible.builtin.apt:
+    name: curl
+    state: present
+    update_cache: true
+  become: true
+
+- name: Ensure code-server service is enabled and running
+  ansible.builtin.systemd:
+    name: "{{ codeserver_unit }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+
+- name: Download code-server installer script
+  ansible.builtin.get_url:
+    url: https://code-server.dev/install.sh
+    dest: /tmp/code-server-install.sh
+    mode: "0755"
+  become: true
+  tags: [never, codeserver_update]
+
+- name: Run code-server installer (updates system install)
+  ansible.builtin.command: /tmp/code-server-install.sh
+  become: true
+  register: codeserver_install
+  changed_when: true
+  tags: [never, codeserver_update]
+
+- name: Restart code-server after update
+  ansible.builtin.systemd:
+    name: "{{ codeserver_unit }}"
+    state: restarted
+  become: true
+  tags: [never, codeserver_update]
+
+- name: Remove installer script
+  ansible.builtin.file:
+    path: /tmp/code-server-install.sh
+    state: absent
+  become: true
+  tags: [never, codeserver_update]
