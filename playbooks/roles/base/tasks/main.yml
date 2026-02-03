@@ -1,0 +1,64 @@
+---
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+  tags: [never, os_upgrade]
+
+- name: Upgrade packages
+  ansible.builtin.apt:
+    upgrade: dist
+  become: true
+  tags: [never, os_upgrade]
+
+- name: Check if reboot is required
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: reboot_required
+  tags: [never, os_upgrade]
+
+- name: Ensure common packages installed
+  ansible.builtin.apt:
+    name:
+      - curl
+      - ca-certificates
+      - git
+      - vim
+      - htop
+      - unzip
+    state: present
+  become: true
+
+- name: Ensure timezone is set
+  community.general.timezone:
+    name: "America/New_York"
+  become: true
+
+- name: Ensure SSH is enabled and running
+  ansible.builtin.service:
+    name: ssh
+    state: started
+    enabled: true
+  become: true
+
+- name: Reboot system if required
+  ansible.builtin.reboot:
+    msg: "Reboot triggered by Ansible after OS upgrade"
+    reboot_timeout: 600
+    pre_reboot_delay: 10
+    post_reboot_delay: 30
+    test_command: whoami
+  when: reboot_required.stat.exists
+  become: true
+  tags: [never, os_upgrade]
+
+- name: Reboot system manually
+  ansible.builtin.reboot:
+    msg: "Manually reboot when asked to"
+    reboot_timeout: 600
+    pre_reboot_delay: 10
+    post_reboot_delay: 30
+    test_command: whoami
+  become: true
+  tags: [never, manual_reboot]

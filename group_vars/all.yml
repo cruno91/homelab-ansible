@@ -1,0 +1,9 @@
+ansible_python_interpreter: /usr/bin/python3
+
+# Use sudo for system tasks.
+ansible_become: true
+ansible_become_method: sudo
+
+# Use --ask-become-pass for sudo passwords.
+# Add for SSH key handling.
+ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new"

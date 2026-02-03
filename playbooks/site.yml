@@ -1,0 +1,6 @@
+---
+- name: Baseline management for RPis
+  hosts: rpis
+  gather_facts: true
+  roles:
+    - base

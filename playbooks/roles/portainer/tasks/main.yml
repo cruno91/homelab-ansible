@@ -1,0 +1,47 @@
+---
+- name: Ensure Docker is installed
+  ansible.builtin.command: docker --version
+  register: docker_version
+  changed_when: false
+  become: true
+
+- name: Fail if Docker is not installed
+  ansible.builtin.fail:
+    msg: "Docker is not installed on this host. Install docker-ce/docker.io first."
+  when: docker_version.rc != 0
+
+- name: Ensure Docker is enabled and running
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+  become: true
+
+- name: Ensure portainer_data volume exists
+  community.docker.docker_volume:
+    name: portainer_data
+    state: present
+  become: true
+
+- name: Pull latest Portainer image
+  community.docker.docker_image:
+    name: portainer/portainer-ce
+    tag: latest
+    source: pull
+  become: true
+  tags: [portainer_update]
+
+- name: Ensure Portainer container is running and recreate if needed
+  community.docker.docker_container:
+    name: portainer
+    image: portainer/portainer-ce:latest
+    state: started
+    restart_policy: always
+    recreate: true
+    published_ports:
+      - "0.0.0.0:8000:8000"
+      - "0.0.0.0:9443:9443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:rw"
+      - "portainer_data:/data:rw"
+  become: true

@@ -1,0 +1,6 @@
+---
+- name: Manage Portainer
+  hosts: portainer
+  gather_facts: false
+  roles:
+    - portainer
