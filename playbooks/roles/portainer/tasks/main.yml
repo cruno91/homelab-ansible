@@ -23,6 +23,12 @@
     state: present
   become: true
 
+- name: Ensure nginx-proxy Docker network exists
+  community.docker.docker_network:
+    name: nginx-proxy-network
+    state: present
+  become: true
+
 - name: Pull latest Portainer image
   community.docker.docker_image:
     name: portainer/portainer-ce
@@ -44,4 +50,7 @@
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:rw"
       - "portainer_data:/data:rw"
+    # This is needed for the nginx-proxy-manager stack.
+    networks:
+      - name: nginx-proxy-network
   become: true
