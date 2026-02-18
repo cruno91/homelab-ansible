@@ -1,0 +1,45 @@
+---
+- name: Skip primary node (handled in separate play)
+  ansible.builtin.meta: end_host
+  when: k3s_skip_primary | default(false) and inventory_hostname == groups['k3s-dev'][0]
+
+- name: Remove kube-vip manifests
+  ansible.builtin.file:
+    path: "{{ k3s_manifests_dir }}/{{ item }}"
+    state: absent
+  loop:
+    - kube-vip.yaml
+    - kube-vip-rbac.yaml
+  become: true
+
+- name: Check for K3s agent uninstall script
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s-agent-uninstall.sh
+  register: k3s_agent_uninstall
+
+- name: Run K3s agent uninstall script
+  ansible.builtin.command: /usr/local/bin/k3s-agent-uninstall.sh
+  become: true
+  when: k3s_agent_uninstall.stat.exists
+
+- name: Check for K3s server uninstall script
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s-uninstall.sh
+  register: k3s_server_uninstall
+
+- name: Run K3s server uninstall script
+  ansible.builtin.command: /usr/local/bin/k3s-uninstall.sh
+  become: true
+  when: k3s_server_uninstall.stat.exists
+
+- name: Verify K3s binary is removed
+  ansible.builtin.file:
+    path: /usr/local/bin/k3s
+    state: absent
+  become: true
+
+- name: Remove K3s config directory
+  ansible.builtin.file:
+    path: "{{ k3s_config_dir }}"
+    state: absent
+  become: true

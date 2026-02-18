@@ -1,0 +1,12 @@
+---
+- name: Include K3s prerequisites
+  ansible.builtin.include_tasks: rpi-prerequisites.yml
+  when: k3s_action == "install"
+
+- name: Include K3s install tasks
+  ansible.builtin.include_tasks: install.yml
+  when: k3s_action == "install"
+
+- name: Include K3s uninstall tasks
+  ansible.builtin.include_tasks: uninstall.yml
+  when: k3s_action == "uninstall"

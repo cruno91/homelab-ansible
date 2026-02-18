@@ -1,0 +1,23 @@
+---
+# Play 1: Uninstall K3s from non-primary nodes first
+- name: Uninstall K3s from additional nodes
+  hosts: k3s-dev
+  gather_facts: false
+  serial: 1
+  any_errors_fatal: true
+  vars:
+    k3s_action: uninstall
+    k3s_skip_primary: true
+  roles:
+    - k3s
+
+# Play 2: Uninstall K3s from the primary server last
+- name: Uninstall K3s from primary server
+  hosts: "{{ groups['k3s-dev'][0] }}"
+  gather_facts: false
+  any_errors_fatal: true
+  vars:
+    k3s_action: uninstall
+    k3s_skip_primary: false
+  roles:
+    - k3s

@@ -1,0 +1,28 @@
+---
+- name: Install iptables
+  ansible.builtin.apt:
+    name: iptables
+    state: present
+    update_cache: true
+  become: true
+
+- name: Read current boot cmdline
+  ansible.builtin.slurp:
+    src: /boot/firmware/cmdline.txt
+  register: boot_cmdline
+  become: true
+
+- name: Enable cgroup memory in boot cmdline
+  ansible.builtin.replace:
+    path: /boot/firmware/cmdline.txt
+    regexp: '^(.*)$'
+    replace: '\1 cgroup_memory=1 cgroup_enable=memory'
+  become: true
+  when: "'cgroup_memory=1' not in (boot_cmdline.content | b64decode)"
+  register: cmdline_changed
+
+- name: Reboot to apply cgroup changes
+  ansible.builtin.reboot:
+    reboot_timeout: 300
+  become: true
+  when: cmdline_changed is changed

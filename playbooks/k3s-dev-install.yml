@@ -1,0 +1,10 @@
+---
+- name: Install K3s cluster
+  hosts: k3s-dev
+  gather_facts: true
+  serial: 1
+  any_errors_fatal: true
+  vars:
+    k3s_action: install
+  roles:
+    - k3s
