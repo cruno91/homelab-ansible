@@ -42,6 +42,9 @@
     enabled: true
   become: true
 
+# K3s-dev nodes are rebooted by the safe-reboot play (drain → reboot →
+# wait Ready → uncordon) so etcd quorum is preserved. Skip the simple
+# reboot path here for those hosts.
 - name: Reboot system if required
   ansible.builtin.reboot:
     msg: "Reboot triggered by Ansible after OS upgrade"
@@ -49,7 +52,9 @@
     pre_reboot_delay: 10
     post_reboot_delay: 30
     test_command: whoami
-  when: reboot_required.stat.exists
+  when:
+    - reboot_required.stat.exists
+    - "'k3s-dev' not in group_names"
   become: true
   tags: [never, os_upgrade]
 
@@ -60,5 +65,6 @@
     pre_reboot_delay: 10
     post_reboot_delay: 30
     test_command: whoami
+  when: "'k3s-dev' not in group_names"
   become: true
   tags: [never, manual_reboot]

@@ -1,0 +1,14 @@
+---
+# Safe rolling reboot of the K3s dev cluster. One node at a time:
+# drain → reboot → wait for k3s API → wait for Ready → uncordon.
+# Use --limit to reboot a subset; otherwise all three nodes are rebooted.
+- name: Rolling reboot of K3s cluster
+  hosts: k3s-dev
+  gather_facts: true
+  serial: 1
+  any_errors_fatal: true
+  vars:
+    k3s_action: safe_reboot
+    k3s_reboot_force: true
+  roles:
+    - k3s
