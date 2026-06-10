@@ -11,6 +11,10 @@
   ansible.builtin.include_tasks: update.yml
   when: k3s_action == "update"
 
+- name: Include K3s safe-reboot tasks
+  ansible.builtin.include_tasks: safe-reboot.yml
+  when: k3s_action == "safe_reboot"
+
 - name: Include K3s uninstall tasks
   ansible.builtin.include_tasks: uninstall.yml
   when: k3s_action == "uninstall"

@@ -119,6 +119,38 @@ If you want to restart K3s to pick up a `config.yaml` change without bumping the
 
 ---
 
+## Safe rolling reboot
+
+Reboot the cluster one node at a time, preserving etcd quorum the same way the rolling upgrade does. Use this any time something asks for a reboot — OS upgrades that set `/var/run/reboot-required`, kernel changes, firmware updates, manual maintenance, etc.
+
+Entry points:
+
+```bash
+# Reboot only the K3s dev cluster.
+ansible-playbook -i inventory/hosts.ini playbooks/k3s-dev-reboot.yml --ask-become-pass
+
+# Reboot a single K3s node.
+ansible-playbook -i inventory/hosts.ini playbooks/k3s-dev-reboot.yml \
+  --ask-become-pass --limit k3s-dev-node-3
+```
+
+The K3s reboot path is `serial: 1` with `any_errors_fatal: true`. For each node:
+
+1. Pick a peer in `[k3s-dev]` as the helper for `kubectl` calls.
+2. Drain the target (from the helper, so the drain command keeps working while the target is down).
+3. Reboot the target. The `ansible.builtin.reboot` module waits for SSH to come back.
+4. Wait for the local K3s API on `:6443`.
+5. `kubectl wait --for=condition=Ready node/<name>` from the helper.
+6. Uncordon.
+
+If step 5 fails, Ansible halts before touching the next node — etcd quorum (2-of-3) stays intact.
+
+When `site.yml --tags os_upgrade` runs, the K3s safe-reboot play also runs, but each host's `safe-reboot.yml` checks `/var/run/reboot-required` first and `end_host`s itself if no reboot is needed. So nodes that didn't need to reboot after `apt upgrade` skip the drain/reboot dance entirely.
+
+The simple `ansible.builtin.reboot` tasks in the `base` role self-skip for hosts in the `k3s-dev` group — the safe-reboot plays own the reboot for those nodes.
+
+---
+
 ## Fetching the kubeconfig
 
 ```bash
@@ -253,6 +285,10 @@ export KUBECONFIG=$(pwd)/kubeconfig-k3s-dev.yaml
 2. `ansible-playbook -i inventory/hosts.ini playbooks/k3s-dev-update.yml --ask-become-pass`
 3. Run the health checks.
 
+### "I want to reboot the cluster"
+
+See [Safe rolling reboot](#safe-rolling-reboot). One node at a time, drained, quorum preserved.
+
 ### "I changed something in `config.yaml` / kube-vip / group_vars"
 
 1. `ansible-playbook -i inventory/hosts.ini playbooks/k3s-dev-install.yml --ask-become-pass` — stages new files. Idempotent.
@@ -317,9 +353,10 @@ If you re-order `[k3s-dev]` in `inventory/hosts.ini` so a different host is firs
 │   ├── hosts.ini
 │   └── group_vars/k3s-dev.yml         # All K3s tunables
 ├── playbooks/
-│   ├── site.yml                       # Baseline OS (rpis:!k3s-dev, then k3s-dev serial:1)
+│   ├── site.yml                       # Baseline OS + safe reboot plays for k3s-dev
 │   ├── k3s-dev-install.yml            # Install / re-stage config + manifests
 │   ├── k3s-dev-update.yml             # Rolling upgrade or config-only restart
+│   ├── k3s-dev-reboot.yml             # Rolling reboot (drain → reboot → wait → uncordon)
 │   ├── k3s-dev-kubeconfig.yml         # Fetch kubeconfig with VIP rewritten
 │   ├── k3s-dev-remove-node.yml        # Drain + delete + uninstall single node
 │   ├── k3s-dev-uninstall.yml          # Full teardown
@@ -331,6 +368,7 @@ If you re-order `[k3s-dev]` in `inventory/hosts.ini` so a different host is firs
 │           ├── rpi-prerequisites.yml  # iptables, cgroup_memory
 │           ├── install.yml            # Bootstrap + join
 │           ├── update.yml             # Drain → install → wait → uncordon
+│           ├── safe-reboot.yml        # Drain → reboot → wait → uncordon
 │           ├── uninstall.yml
 │           └── fetch-kubeconfig.yml
 └── docs/

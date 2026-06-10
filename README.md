@@ -41,6 +41,7 @@ All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd)
 │ ├── codeserver.yml
 │ ├── k3s-dev-install.yml
 │ ├── k3s-dev-kubeconfig.yml
+│ ├── k3s-dev-reboot.yml
 │ ├── k3s-dev-remove-node.yml
 │ ├── k3s-dev-uninstall.yml
 │ ├── k3s-dev-update.yml
@@ -113,6 +114,12 @@ All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd)
 	```bash
 	ansible-playbook -i inventory/hosts.ini playbooks/site.yml --ask-become-pass --tags manual_reboot
 	```
+
+	Non-K3s hosts reboot in parallel. K3s dev nodes reboot one at a time
+	with drain → reboot → wait-for-Ready → uncordon, so etcd quorum is
+	preserved. The `os_upgrade` tag uses the same safe path on K3s nodes
+	when `/var/run/reboot-required` is set after the apt upgrade. To reboot
+	only the K3s cluster, use [`playbooks/k3s-dev-reboot.yml`](docs/k3s-ops.md#safe-rolling-reboot).
 
 For K3s cluster install, upgrades, node add/remove, kubeconfig fetch, snapshots, and health checks, see [docs/k3s-ops.md](docs/k3s-ops.md).
 
