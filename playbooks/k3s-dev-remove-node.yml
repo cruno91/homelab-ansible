@@ -18,13 +18,22 @@
           treats it as the cluster's source of truth. To replace the bootstrap
           node, restore from an etcd snapshot instead.
 
+# Gather facts on the target so we can resolve its system hostname (the name
+# K3s registers it under, which may differ from its inventory hostname).
+- name: Gather facts from target node
+  hosts: "{{ target_node }}"
+  gather_facts: true
+  tasks: []
+
 - name: Drain and delete target node from cluster
-  hosts: "{{ groups['k3s-dev'] | reject('equalto', target_node) | list | first }}"
+  hosts: "{{ groups['k3s-dev'] | reject('equalto', target_node) | list | first }}"  # noqa: syntax-check[specific]
   gather_facts: false
+  vars:
+    k3s_node_name: "{{ hostvars[target_node].ansible_hostname }}"
   tasks:
-    - name: Drain {{ target_node }}
+    - name: Drain {{ k3s_node_name }}
       ansible.builtin.command: >-
-        k3s kubectl drain {{ target_node }}
+        k3s kubectl drain {{ k3s_node_name }}
           --ignore-daemonsets
           --delete-emptydir-data
           --force
@@ -33,7 +42,7 @@
       changed_when: true
 
     - name: Delete node object from cluster
-      ansible.builtin.command: k3s kubectl delete node {{ target_node }}
+      ansible.builtin.command: k3s kubectl delete node {{ k3s_node_name }}
       become: true
       changed_when: true
 

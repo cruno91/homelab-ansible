@@ -11,9 +11,9 @@
     msg: "Rolling update requires at least 2 nodes in the [k3s-dev] group."
   when: k3s_helper_node == ''
 
-- name: Drain {{ inventory_hostname }}
+- name: Drain {{ ansible_hostname }}
   ansible.builtin.command: >-
-    k3s kubectl drain {{ inventory_hostname }}
+    k3s kubectl drain {{ ansible_hostname }}
       --ignore-daemonsets
       --delete-emptydir-data
       --force
@@ -52,14 +52,14 @@
   ansible.builtin.command: >-
     k3s kubectl wait
       --for=condition=Ready
-      node/{{ inventory_hostname }}
+      node/{{ ansible_hostname }}
       --timeout=300s
   delegate_to: "{{ k3s_helper_node }}"
   become: true
   changed_when: false
 
-- name: Uncordon {{ inventory_hostname }}
-  ansible.builtin.command: k3s kubectl uncordon {{ inventory_hostname }}
+- name: Uncordon {{ ansible_hostname }}
+  ansible.builtin.command: k3s kubectl uncordon {{ ansible_hostname }}
   delegate_to: "{{ k3s_helper_node }}"
   become: true
   changed_when: true

@@ -1,0 +1,20 @@
+---
+profile: basic
+
+exclude_paths:
+  - .github/
+  - kubeconfig-*.yaml
+
+# Roles in this repo are flat (no meta/main.yml, no role-name prefix on vars).
+# That's intentional for a small homelab repo — skip the corresponding rules.
+skip_list:
+  - var-naming[no-role-prefix]
+  - meta-no-info
+
+warn_list:
+  - command-instead-of-shell
+
+# Provide a placeholder for playbooks that require a --extra-vars at runtime,
+# so ansible-lint's syntax-check pass doesn't trip on an undefined variable.
+extra_vars:
+  target_node: k3s-dev-node-3

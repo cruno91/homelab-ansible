@@ -1,21 +1,23 @@
 ---
 extends: default
 
+ignore: |
+  *.j2
+  kubeconfig-*.yaml
+  .github/
+
 rules:
   line-length:
-    max: 200
+    max: 160
     level: warning
+  document-start: disable
   truthy:
     check-keys: false
   comments:
     min-spaces-from-content: 1
-  comments-indentation: disable
-  document-start: disable
+  comments-indentation: false
   braces:
     max-spaces-inside: 1
-  indentation:
-    spaces: 2
-    indent-sequences: consistent
-
-ignore: |
-  .github/
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true

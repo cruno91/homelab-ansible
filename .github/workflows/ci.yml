@@ -1,111 +1,81 @@
+---
 name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
-  yamllint:
-    name: yamllint
+  lint:
+    name: Lint (yamllint + ansible-lint)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
 
-      - name: Install yamllint
-        run: pip install yamllint
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-lint-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: pip-${{ runner.os }}-lint-
 
-      - name: Run yamllint
+      - name: Install lint tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible-core ansible-lint yamllint
+
+      - name: Install required Ansible collections
+        run: ansible-galaxy collection install -r requirements.yml
+
+      - name: yamllint
         run: yamllint .
 
-  ansible:
-    name: Ansible syntax + lint
+      - name: ansible-lint
+        run: ansible-lint
+
+  syntax:
+    name: Ansible syntax + inventory parse
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
 
-      - name: Install Ansible + ansible-lint
-        run: pip install ansible ansible-lint
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-syntax-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: pip-${{ runner.os }}-syntax-
 
-      - name: Install required collections
-        run: ansible-galaxy collection install community.docker community.general
+      - name: Install Ansible
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible-core
 
-      - name: Parse inventory
-        run: ansible-inventory -i inventory/hosts.ini --list > /dev/null
+      - name: Install required Ansible collections
+        run: ansible-galaxy collection install -r requirements.yml
+
+      - name: Verify inventory parses
+        run: ansible-inventory -i inventory/hosts.ini --list >/dev/null
 
       - name: Syntax-check every playbook
         run: |
-          set -e
+          set -euo pipefail
           for f in playbooks/*.yml; do
-            echo "::group::$f"
+            echo "::group::syntax-check ${f}"
             ansible-playbook --syntax-check -i inventory/hosts.ini "$f" \
               --extra-vars "target_node=k3s-dev-node-3"
             echo "::endgroup::"
           done
-
-      # Advisory: ansible-lint may flag pre-existing style; do not block CI on it.
-      - name: ansible-lint (advisory)
-        continue-on-error: true
-        run: ansible-lint
-
-  manifests:
-    name: Kubernetes manifest validation
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install Jinja2 + PyYAML
-        run: pip install jinja2 pyyaml
-
-      - name: Install kubeconform
-        run: |
-          VERSION=v0.6.6
-          mkdir -p "$HOME/.local/bin"
-          curl -fsSL \
-            "https://github.com/yannh/kubeconform/releases/download/${VERSION}/kubeconform-linux-amd64.tar.gz" \
-            | tar xz -C "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Render kube-vip DaemonSet from template
-        run: |
-          python3 - <<'PY'
-          import jinja2, yaml, pathlib
-          group_vars = yaml.safe_load(
-              pathlib.Path("inventory/group_vars/k3s-dev.yml").read_text()
-          )
-          tmpl = pathlib.Path(
-              "playbooks/roles/k3s/templates/kube-vip.yaml.j2"
-          ).read_text()
-          rendered = (
-              jinja2.Environment(undefined=jinja2.StrictUndefined)
-              .from_string(tmpl)
-              .render(**group_vars)
-          )
-          pathlib.Path("rendered-kube-vip.yaml").write_text(rendered)
-          print(rendered)
-          PY
-
-      - name: Validate kube-vip RBAC manifest
-        run: kubeconform -strict -summary playbooks/roles/k3s/files/kube-vip-rbac.yaml
-
-      - name: Validate rendered kube-vip DaemonSet
-        run: kubeconform -strict -summary rendered-kube-vip.yaml

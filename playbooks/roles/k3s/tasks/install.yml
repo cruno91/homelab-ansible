@@ -66,7 +66,7 @@
 
 # First server: bootstrap cluster
 - name: Install K3s on first server
-  ansible.builtin.shell: "{{ k3s_install_script }}"
+  ansible.builtin.command: "{{ k3s_install_script }}"
   args:
     creates: /usr/local/bin/k3s
   environment:
@@ -103,7 +103,7 @@
 
 # Additional servers: join cluster
 - name: Join K3s cluster
-  ansible.builtin.shell: "{{ k3s_install_script }}"
+  ansible.builtin.command: "{{ k3s_install_script }}"
   args:
     creates: /usr/local/bin/k3s
   environment:

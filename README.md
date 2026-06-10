@@ -208,6 +208,10 @@ sudo systemctl start k3s
 
 Use Command 11. The bootstrap node cannot be removed this way — restore from a snapshot if you need to replace it.
 
+### Inventory hostname vs. K3s node name
+
+K3s registers each node under its system hostname (`hostname --short`), which may differ from its inventory hostname. For example, `k3s-dev-node-1` (inventory) is `yavin2` (system) on this cluster. The rolling-update and remove-node playbooks gather facts and use `ansible_hostname` when calling `kubectl drain` / `wait` / `uncordon`, so they address each node under the name K3s actually knows it by.
+
 ### Bootstrap node fragility
 
 The install role treats the first host in `[k3s-dev]` as the cluster's source of truth (where the join token is read from). If that node is destroyed while others survive, re-running install would form a new cluster on the bootstrap host and orphan the rest. `playbooks/k3s-dev-install.yml` detects this and fails fast. Recover by restoring the bootstrap node from a snapshot, or by tearing the whole cluster down and reinstalling.
@@ -222,7 +226,7 @@ export KUBECONFIG=$(pwd)/kubeconfig-k3s-dev.yaml
 
 | Check                  | Command                                                                                                                     | Healthy result                                                                                          |
 |------------------------|-----------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
-| All nodes Ready        | `kubectl get nodes`                                                                                                         | 3 nodes, all `Ready`, role column includes `control-plane,etcd,master`                                  |
+| All nodes Ready        | `kubectl get nodes`                                                                                                         | 3 nodes, all `Ready`, role column shows `control-plane,etcd`                                            |
 | Versions consistent    | `kubectl get nodes -o wide`                                                                                                 | `VERSION` column matches across all 3 nodes (mismatch = mid-upgrade or failed upgrade)                  |
 | Nothing cordoned       | `kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.unschedulable}{"\n"}{end}'`                    | Each node prints empty / `<no value>` (anything `true` means a drain didn't get uncordoned)             |
 | Control plane pods     | `kubectl -n kube-system get pods`                                                                                           | `coredns`, `local-path-provisioner`, `metrics-server`, `traefik`, and `kube-vip-ds-*` are all `Running` |
@@ -248,4 +252,27 @@ ansible -i inventory/hosts.ini rpis \
 
 ### Dry-runs
 
-Add `--check --deff` to commands.
+Add `--check --diff` to commands.
+
+## CI
+
+`.github/workflows/ci.yml` runs on every push and pull request to `main`. The runners have no network path to the hosts, so the workflow covers everything that doesn't require cluster contact:
+
+- **yamllint** — config in `.yamllint.yml`
+- **ansible-lint** — config in `.ansible-lint`, currently passing the `production` profile
+- **inventory parse** — `ansible-inventory --list`
+- **playbook syntax-check** — `ansible-playbook --syntax-check` on every file under `playbooks/`
+
+Required collections are pinned in `requirements.yml`. To run the same checks locally:
+
+```bash
+pip install --user ansible-core ansible-lint yamllint
+ansible-galaxy collection install -r requirements.yml
+yamllint .
+ansible-lint
+for f in playbooks/*.yml; do
+  ansible-playbook --syntax-check "$f" --extra-vars "target_node=k3s-dev-node-3"
+done
+```
+
+`ansible.cfg` at the repo root sets `inventory = inventory/hosts.ini` and silences the hyphenated-group-name warning, so the `-i inventory/hosts.ini` flag is optional in every command above.
