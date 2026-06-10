@@ -21,7 +21,36 @@
       write-kubeconfig-mode: "644"
       tls-san:
         - "{{ k3s_vip }}"
+      etcd-snapshot-schedule-cron: "{{ k3s_etcd_snapshot_cron }}"
+      etcd-snapshot-retention: {{ k3s_etcd_snapshot_retention }}
+      etcd-snapshot-dir: "{{ k3s_etcd_snapshot_dir }}"
   become: true
+
+# kube-vip auto-applies from the K3s server-manifests dir on the bootstrap node.
+# K3s reconciles the cluster-wide DaemonSet from there; we only stage on one node.
+- name: Ensure K3s manifests dir exists
+  ansible.builtin.file:
+    path: "{{ k3s_manifests_dir }}"
+    state: directory
+    mode: "0755"
+  become: true
+  when: inventory_hostname == groups['k3s-dev'][0]
+
+- name: Stage kube-vip RBAC manifest
+  ansible.builtin.copy:
+    src: kube-vip-rbac.yaml
+    dest: "{{ k3s_manifests_dir }}/kube-vip-rbac.yaml"
+    mode: "0644"
+  become: true
+  when: inventory_hostname == groups['k3s-dev'][0]
+
+- name: Stage kube-vip daemonset manifest
+  ansible.builtin.template:
+    src: kube-vip.yaml.j2
+    dest: "{{ k3s_manifests_dir }}/kube-vip.yaml"
+    mode: "0644"
+  become: true
+  when: inventory_hostname == groups['k3s-dev'][0]
 
 - name: Check if K3s is already installed
   ansible.builtin.stat:
@@ -31,16 +60,18 @@
 - name: Download K3s install script
   ansible.builtin.get_url:
     url: https://get.k3s.io
-    dest: /tmp/k3s-install.sh
+    dest: "{{ k3s_install_script }}"
     mode: "0755"
   when: not k3s_binary.stat.exists
 
 # First server: bootstrap cluster
 - name: Install K3s on first server
-  ansible.builtin.shell: /tmp/k3s-install.sh
+  ansible.builtin.command: "{{ k3s_install_script }}"
   args:
     creates: /usr/local/bin/k3s
   environment:
+    INSTALL_K3S_CHANNEL: "{{ k3s_channel | default('') }}"
+    INSTALL_K3S_VERSION: "{{ k3s_version | default('') }}"
     INSTALL_K3S_EXEC: "{{ k3s_server_exec }}"
   become: true
   when: inventory_hostname == groups['k3s-dev'][0]
@@ -72,12 +103,14 @@
 
 # Additional servers: join cluster
 - name: Join K3s cluster
-  ansible.builtin.shell: /tmp/k3s-install.sh
+  ansible.builtin.command: "{{ k3s_install_script }}"
   args:
     creates: /usr/local/bin/k3s
   environment:
     K3S_URL: "https://{{ hostvars[groups['k3s-dev'][0]].ansible_host }}:6443"
     K3S_TOKEN: "{{ hostvars[groups['k3s-dev'][0]].k3s_cluster_token | default('') }}"
+    INSTALL_K3S_CHANNEL: "{{ k3s_channel | default('') }}"
+    INSTALL_K3S_VERSION: "{{ k3s_version | default('') }}"
     INSTALL_K3S_EXEC: "{{ k3s_server_exec }}"
   become: true
   when:

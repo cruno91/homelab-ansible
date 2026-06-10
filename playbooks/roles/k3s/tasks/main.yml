@@ -7,6 +7,14 @@
   ansible.builtin.include_tasks: install.yml
   when: k3s_action == "install"
 
+- name: Include K3s rolling-update tasks
+  ansible.builtin.include_tasks: update.yml
+  when: k3s_action == "update"
+
 - name: Include K3s uninstall tasks
   ansible.builtin.include_tasks: uninstall.yml
   when: k3s_action == "uninstall"
+
+- name: Fetch kubeconfig from primary server
+  ansible.builtin.include_tasks: fetch-kubeconfig.yml
+  when: k3s_action == "fetch_kubeconfig"

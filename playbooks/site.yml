@@ -1,6 +1,16 @@
 ---
-- name: Baseline management for RPis
-  hosts: rpis
+- name: Baseline management for non-K3s RPis
+  hosts: rpis:!k3s-dev
   gather_facts: true
+  roles:
+    - base
+
+# K3s nodes upgrade one at a time so etcd quorum (2-of-3) is preserved
+# across any reboot the os_upgrade tag triggers.
+- name: Baseline management for K3s dev cluster
+  hosts: k3s-dev
+  gather_facts: true
+  serial: 1
+  any_errors_fatal: true
   roles:
     - base

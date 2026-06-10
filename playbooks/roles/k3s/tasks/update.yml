@@ -1,0 +1,65 @@
+---
+# Rolling K3s upgrade for one node. Caller play must use serial: 1.
+# Drains via a helper node, re-runs the install script (which restarts k3s),
+# waits for Ready, then uncordons.
+- name: Determine helper node for drain/uncordon
+  ansible.builtin.set_fact:
+    k3s_helper_node: "{{ (groups['k3s-dev'] | reject('equalto', inventory_hostname) | list)[0] | default('') }}"
+
+- name: Fail if no helper node is available
+  ansible.builtin.fail:
+    msg: "Rolling update requires at least 2 nodes in the [k3s-dev] group."
+  when: k3s_helper_node == ''
+
+- name: Drain {{ ansible_hostname }}
+  ansible.builtin.command: >-
+    k3s kubectl drain {{ ansible_hostname }}
+      --ignore-daemonsets
+      --delete-emptydir-data
+      --force
+      --timeout=300s
+  delegate_to: "{{ k3s_helper_node }}"
+  become: true
+  changed_when: true
+
+- name: Re-download K3s install script
+  ansible.builtin.get_url:
+    url: https://get.k3s.io
+    dest: "{{ k3s_install_script }}"
+    mode: "0755"
+    force: true
+  become: true
+
+# INSTALL_K3S_EXEC is intentionally not set: the install script reuses the
+# original service config (including --cluster-init / --server flags) when
+# upgrading in place.
+- name: Run K3s install script to upgrade in place
+  ansible.builtin.command: "{{ k3s_install_script }}"
+  environment:
+    INSTALL_K3S_CHANNEL: "{{ k3s_channel | default('') }}"
+    INSTALL_K3S_VERSION: "{{ k3s_version | default('') }}"
+    INSTALL_K3S_SKIP_DOWNLOAD: "false"
+  become: true
+  changed_when: true
+
+- name: Wait for local K3s API to be ready again
+  ansible.builtin.wait_for:
+    port: 6443
+    host: "{{ ansible_facts['default_ipv4']['address'] }}"
+    timeout: 300
+
+- name: Wait for node to report Ready
+  ansible.builtin.command: >-
+    k3s kubectl wait
+      --for=condition=Ready
+      node/{{ ansible_hostname }}
+      --timeout=300s
+  delegate_to: "{{ k3s_helper_node }}"
+  become: true
+  changed_when: false
+
+- name: Uncordon {{ ansible_hostname }}
+  ansible.builtin.command: k3s kubectl uncordon {{ ansible_hostname }}
+  delegate_to: "{{ k3s_helper_node }}"
+  become: true
+  changed_when: true
