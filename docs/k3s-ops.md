@@ -250,6 +250,90 @@ kube-vip claims `k3s_vip` (`10.0.3.20`) via ARP on `eth0`, with leader election 
 
 To change kube-vip itself: bump `kubevip_version` (or edit the template) in `inventory/group_vars/k3s-dev.yml`, then re-run the install playbook. K3s reconciles the updated manifest in place — no restart needed.
 
+### Failover test
+
+ARP-based VIP failover usually works, but "usually" is the part you find out about during a real incident. Run this once after install and any time kube-vip is upgraded, so you have confidence the path is real.
+
+1. **Find the current VIP holder.**
+
+   ```bash
+   ansible -i inventory/hosts.ini k3s-dev -a "ip -4 addr show eth0" --become | grep -E "10\.0\.3\.20|CHANGED"
+   ```
+
+   Exactly one node should list `10.0.3.20/32`. Note which one — call it `<holder>`.
+
+2. **Start a watcher in a second terminal.** This polls the API through the VIP once a second so you can see exactly how long the blip lasts.
+
+   ```bash
+   while true; do
+     date +%H:%M:%S
+     kubectl --server=https://10.0.3.20:6443 get --raw=/healthz || echo FAIL
+     sleep 1
+   done
+   ```
+
+3. **Take the holder down.** Either a graceful shutdown or a hard power cut — both are valid tests, but graceful is friendlier to etcd.
+
+   ```bash
+   ansible -i inventory/hosts.ini <holder> -a "shutdown -h now" --become
+   ```
+
+4. **Watch the failover.** The watcher should show a few seconds of failures, then `ok` resume as another kube-vip pod wins the leader election and claims the VIP via gratuitous ARP. Typical blip: 3–10 seconds. Anything over ~30 seconds is suspect.
+
+5. **Confirm the VIP moved.**
+
+   ```bash
+   ansible -i inventory/hosts.ini k3s-dev -a "ip -4 addr show eth0" --become | grep -E "10\.0\.3\.20|CHANGED"
+   ```
+
+   A *different* node should now hold `10.0.3.20/32`. The original `<holder>` will show `CHANGED => UNREACHABLE` — expected, it's powered off.
+
+6. **Bring the original holder back up.** Power it on, wait for SSH, then verify k3s came back cleanly:
+
+   ```bash
+   ansible -i inventory/hosts.ini <holder> -a "systemctl is-active k3s" --become
+   kubectl get nodes
+   ```
+
+   The node should return to `Ready`. The VIP will *not* move back automatically — kube-vip's leader election is sticky, and there's no reason to flap it. To force the VIP back, repeat the test against the new holder.
+
+If failover doesn't happen, check kube-vip pod logs (`kubectl -n kube-system logs ds/kube-vip-ds`) on the surviving nodes for leader-election errors, and confirm `kubevip_iface` in `inventory/group_vars/k3s-dev.yml` actually matches the interface holding the LAN address on all three Pis.
+
+---
+
+## Cert rotation
+
+K3s issues its own internal PKI: server, etcd peer/client, kube-apiserver, kubelet, admin client, etc. Two layers, two cadences:
+
+| Layer | Validity | Rotation |
+|---|---|---|
+| Leaf certs (server, etcd, apiserver, kubelet, admin client) | 12 months | **Automatic** on k3s service start if within 90 days of expiry |
+| Root CAs | 10 years | Manual via `k3s certificate rotate-ca` when the day comes |
+
+The practical rule: **restart k3s on every server at least once every ~9 months and leaf certs rotate themselves.** The existing workflows already cover this incidentally — `k3s-dev-update.yml`, `k3s-dev-reboot.yml`, and any `site.yml --tags os_upgrade` run that triggers a safe-reboot all restart k3s. As long as the cluster isn't sitting completely untouched for a full year, certs stay fresh.
+
+If you've left the cluster alone too long and a cert *has* expired, recovery is:
+
+```bash
+# On each server
+sudo k3s certificate rotate
+sudo systemctl restart k3s
+```
+
+### Forcing a rotation without a version bump
+
+When no upgrade is pending but you want to refresh certs (e.g. you noticed it's been 11 months), use the config-only restart pattern from [Routine upgrades](#routine-upgrades): pin `k3s_version` to whatever `kubectl get nodes -o wide` currently shows, then run `k3s-dev-update.yml`. The rolling restart triggers auto-rotation on each node.
+
+### Local kubeconfig
+
+The admin client cert embedded in `kubeconfig-k3s-dev.yaml` is on the same 12-month cycle. After any rotation event, re-fetch it:
+
+```bash
+ansible-playbook -i inventory/hosts.ini playbooks/k3s-dev-kubeconfig.yml --ask-become-pass
+```
+
+Otherwise `kubectl` from the workstation will start failing TLS handshakes while the cluster itself is healthy.
+
 ---
 
 ## Health checks
@@ -273,6 +357,7 @@ export KUBECONFIG=$(pwd)/kubeconfig-k3s-dev.yaml
 | etcd members | `kubectl get --raw='/healthz/etcd?verbose'` | All 3 servers healthy |
 | No stuck pods | `kubectl get pods -A --field-selector=status.phase!=Running,status.phase!=Succeeded` | No rows |
 | Snapshot freshness | `ansible -i inventory/hosts.ini k3s-dev -a "ls -t /var/lib/rancher/k3s/server/db/snapshots \| head -1" --become` | Newest file on each server within the last 6 hours |
+| Cert expiry | `ansible -i inventory/hosts.ini k3s-dev -a "k3s certificate check" --become` | All certs > 90 days from expiry; anything closer will auto-rotate on next k3s restart |
 | Service units active | `ansible -i inventory/hosts.ini k3s-dev -a "systemctl is-active k3s" --become` | All `active` |
 
 ---
@@ -332,6 +417,19 @@ If you re-order `[k3s-dev]` in `inventory/hosts.ini` so a different host is firs
 
 ---
 
+## Security notes
+
+### Cluster join token sensitivity
+
+`/var/lib/rancher/k3s/server/node-token` is effectively a "join my cluster as a server" credential. Anyone holding it with network reachability to the API can register a new control-plane node, which is functionally cluster-admin. Treat it as a high-value secret:
+
+- The token is read on the bootstrap node and passed through Ansible facts to joining nodes during install. It is not written anywhere outside `/var/lib/rancher/k3s/` on the cluster itself.
+- The file is mode `0600`, owned by root — only `become: true` access can read it.
+- If you suspect compromise, the token can be rotated. K3s supports `k3s token rotate` (newer versions) or manual rotation via the secrets-encryption flow; see [Backlog](#backlog) for the open mitigation task.
+- Do not paste this token into chat, screenshots, or commit it to git. It is not stored in this repo and should not be.
+
+---
+
 ## Known issues
 
 ### `ansible_hostname` deprecation warnings
@@ -374,3 +472,21 @@ If you re-order `[k3s-dev]` in `inventory/hosts.ini` so a different host is firs
 └── docs/
     └── k3s-ops.md                     # This file
 ```
+
+---
+
+## Backlog
+
+Open improvements, tagged `#todo` for grep. Order is roughly by blast-radius if ignored, not priority.
+
+- **#todo Off-host etcd snapshot backup.** Snapshots currently live only on the nodes themselves under `/var/lib/rancher/k3s/server/db/snapshots/`. If all three Pis are lost simultaneously (fire, theft, simultaneous power-event corruption), the snapshots go with them. Options: enable k3s's native S3 backend (`etcd-s3: true` + credentials in `config.yaml`), or a `cron`/systemd-timer `rsync` pulling the newest snapshot from each node to a NAS or workstation.
+
+- **#todo Resilient persistent storage.** K3s ships with `local-path-provisioner`, which pins each PV to the node that provisioned it. If that node dies, the PV's data is unrecoverable and the pod cannot reschedule. Fine for ephemeral dev workloads; not fine for anything stateful you care about. Options: Longhorn (replicated block storage across the three Pis), NFS from a NAS, or document the limitation and consciously avoid stateful workloads on this cluster.
+
+- **#todo Monitoring and alerting.** The health-check table is a manual procedure — useful when sitting at the workstation, useless at 3am when etcd loses a member or kube-vip stops failing over. Minimal viable setup: Prometheus + Alertmanager in-cluster, or scrape the existing k3s metrics endpoint from an external Grafana Cloud free tier. Alert on at least: node NotReady, etcd quorum loss, cert expiry < 30 days, VIP not bound on any node.
+
+- **#todo Join token rotation procedure.** See [Cluster join token sensitivity](#cluster-join-token-sensitivity). Document and ideally automate a rotation procedure — `k3s token rotate --new-token <value>` on a server, then update any cached copies. Test that joining nodes still works with the rotated token before considering this done.
+
+- **#todo Image pull-through cache.** All three Pis pull images independently from public registries. Over time this hits Docker Hub anonymous pull rate limits (cryptic `ImagePullBackOff` with `toomanyrequests`) and burns home-internet bandwidth. Mitigation: run a registry in mirror mode (e.g. on the workstation or a NAS) and point k3s at it via `/etc/rancher/k3s/registries.yaml`.
+
+- **#todo Workload / PV backup.** etcd snapshots restore the cluster's idea of what should be running, not the contents of PVs. Once stateful workloads exist on the cluster, a second backup track is needed: Velero is the standard; for a homelab a scripted `tar` of the PV directories to off-host storage is sufficient. Depends on the [resilient persistent storage](#backlog) decision — backup approach differs for local-path vs. Longhorn vs. NFS.
