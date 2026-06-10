@@ -1,8 +1,22 @@
 # Cluster identity
 k3s_cluster_name: k3s-dev
 
-# Control plane VIP
+# Control plane VIP (managed by kube-vip)
 k3s_vip: 10.0.3.20
+
+# Pin K3s release. Empty channel/version → install script default ("stable" channel).
+# Set either k3s_channel ("stable" / "latest" / "v1.31") or k3s_version ("v1.31.5+k3s1").
+# Bumping either + running playbooks/k3s-dev-update.yml performs a rolling upgrade.
+k3s_channel: "stable"
+k3s_version: ""
+
+# K3s server flags. --cluster-init is only honored on the first server bootstrap.
+k3s_server_exec: "server --cluster-init"
+
+# Embedded-etcd snapshot management (server-side, in-tree).
+k3s_etcd_snapshot_cron: "0 */6 * * *"
+k3s_etcd_snapshot_retention: 10
+k3s_etcd_snapshot_dir: /var/lib/rancher/k3s/server/db/snapshots
 
 # Network interface for kube-vip ARP
 kubevip_iface: eth0
@@ -10,11 +24,12 @@ kubevip_iface: eth0
 # kube-vip container version
 kubevip_version: v1.0.4
 
-
-# K3s install config
+# K3s install script location
 k3s_install_script: /tmp/k3s-install.sh
-k3s_server_exec: "server --cluster-init"
 
 # K3s filesystem paths
 k3s_config_dir: /etc/rancher/k3s
 k3s_manifests_dir: /var/lib/rancher/k3s/server/manifests
+
+# Local destination for fetched kubeconfig.
+k3s_kubeconfig_local: "{{ playbook_dir }}/../kubeconfig-{{ k3s_cluster_name }}.yaml"
