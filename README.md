@@ -6,31 +6,53 @@ Current roles:
 - Apply a safe baseline for all OSes
 - Manage tagged upgrades
 - Manage Portainer for the simple Docker containers needed in the lab
+- Manage code-server
+- Provision and tear down a K3s dev cluster on Raspberry Pis
 - Keep roles semantic and not procedural
 
 ---
 
 ## Managed Hosts
-| Hostname        | Purpose        | OS                     |
-|-----------------|----------------|------------------------|
-| `portainer-pi`  | Portainer | Raspberry Pi OS Lite |
-| `codeserver-pi` | code-server | Raspberry Pi OS Lite |
+| Hostname           | Purpose                                       | OS                   |
+|--------------------|-----------------------------------------------|----------------------|
+| `portainer-pi`     | Portainer (joined to `nginx-proxy-network`)   | Raspberry Pi OS Lite |
+| `codeserver-pi`    | code-server                                   | Raspberry Pi OS Lite |
+| `k3s-dev-node-1`   | K3s dev cluster — server + worker (bootstrap) | Raspberry Pi OS Lite |
+| `k3s-dev-node-2`   | K3s dev cluster — server + worker             | Raspberry Pi OS Lite |
+| `k3s-dev-node-3`   | K3s dev cluster — server + worker             | Raspberry Pi OS Lite |
+
+All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd) and are untainted, so they also schedule workloads.
 
 ---
 
 ## Repo Structure
 
 ```text
-├── group_vars
-│ └── all.yml
 ├── inventory
+│ ├── group_vars
+│ │ ├── all.yml
+│ │ └── k3s-dev.yml
+│ ├── host_vars
+│ │ └── codeserver-pi.yml
 │ └── hosts.ini
 ├── playbooks
+│ ├── codeserver.yml
+│ ├── k3s-dev-install.yml
+│ ├── k3s-dev-uninstall.yml
 │ ├── portainer.yml
 │ ├── roles
 │ │ ├── base
 │ │ │ └── tasks
 │ │ │     └── main.yml
+│ │ ├── codeserver
+│ │ │ └── tasks
+│ │ │     └── main.yml
+│ │ ├── k3s
+│ │ │ └── tasks
+│ │ │     ├── install.yml
+│ │ │     ├── main.yml
+│ │ │     ├── rpi-prerequisites.yml
+│ │ │     └── uninstall.yml
 │ │ └── portainer
 │ │     └── tasks
 │ │         └── main.yml
@@ -79,6 +101,22 @@ Current roles:
 
 	```bash
 	ansible-playbook -i inventory/hosts.ini playbooks/site.yml --ask-become-pass --tags manual_reboot
+	```
+
+7. Install the K3s dev cluster
+
+	Bootstraps `k3s-dev-node-1` with `server --cluster-init` and joins the remaining nodes as additional servers. Enables `cgroup_memory` and reboots each Pi if needed.
+
+	```bash
+	ansible-playbook -i inventory/hosts.ini playbooks/k3s-dev-install.yml --ask-become-pass
+	```
+
+8. Uninstall the K3s dev cluster
+
+	Tears down non-primary nodes first, then the primary.
+
+	```bash
+	ansible-playbook -i inventory/hosts.ini playbooks/k3s-dev-uninstall.yml --ask-become-pass
 	```
 
 ### Ad-hoc commands
