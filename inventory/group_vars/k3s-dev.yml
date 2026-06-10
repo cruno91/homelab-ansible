@@ -9,6 +9,7 @@ k3s_vip: 10.0.3.20
 # Bumping either + running playbooks/k3s-dev-update.yml performs a rolling upgrade.
 k3s_channel: "stable"
 k3s_version: ""
+#k3s_version: "v1.34.4+k3s1"
 
 # K3s server flags. --cluster-init is only honored on the first server bootstrap.
 k3s_server_exec: "server --cluster-init"
