@@ -5,6 +5,16 @@
   roles:
     - base
 
+# Proxmox runs VMs; we never want it to reboot itself out from under them.
+# The base role's reboot tasks self-skip for hosts in the proxmox group,
+# so os_upgrade here just patches packages and leaves the reboot decision
+# to a human.
+- name: Baseline management for Proxmox hosts
+  hosts: proxmox
+  gather_facts: true
+  roles:
+    - base
+
 # K3s nodes apply baseline one at a time so the cluster is never broadly
 # disturbed. The base role's reboot tasks self-skip for k3s-dev hosts; the
 # safe-reboot plays below own the reboot, drain, and re-Ready dance.
