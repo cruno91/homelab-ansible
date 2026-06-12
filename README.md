@@ -8,6 +8,7 @@ Current roles:
 - Manage Portainer for the simple Docker containers needed in the lab
 - Manage code-server
 - Provision and tear down a K3s dev cluster on Raspberry Pis (see [docs/k3s-ops.md](docs/k3s-ops.md))
+- Run a one-shot post-install on fresh Proxmox VE nodes (see [docs/proxmox-ops.md](docs/proxmox-ops.md))
 - Keep roles semantic and not procedural
 
 ---
@@ -22,7 +23,7 @@ Current roles:
 | `k3s-dev-node-3`   | K3s dev cluster — server + worker             | Raspberry Pi OS Lite |
 | `proxmox-node-1`   | Proxmox VE hypervisor                         | Proxmox VE 9.2.2     |
 
-All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd) and are untainted, so they also schedule workloads. K3s-specific ops live in [docs/k3s-ops.md](docs/k3s-ops.md).
+All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd) and are untainted, so they also schedule workloads. K3s-specific ops live in [docs/k3s-ops.md](docs/k3s-ops.md). Proxmox-specific ops live in [docs/proxmox-ops.md](docs/proxmox-ops.md).
 
 ---
 
@@ -30,7 +31,8 @@ All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd)
 
 ```text
 ├── docs
-│ └── k3s-ops.md
+│ ├── k3s-ops.md
+│ └── proxmox-ops.md
 ├── inventory
 │ ├── group_vars
 │ │ ├── all.yml
@@ -66,7 +68,12 @@ All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd)
 │ │ │ │ └── update.yml
 │ │ │ └── templates
 │ │ │     └── kube-vip.yaml.j2
-│ │ └── portainer
+│ │ ├── portainer
+│ │ │ └── tasks
+│ │ │     └── main.yml
+│ │ └── proxmox
+│ │     ├── files
+│ │     │ └── whiptail
 │ │     └── tasks
 │ │         └── main.yml
 │ └── site.yml
@@ -122,12 +129,10 @@ All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd)
 	path on K3s nodes when `/var/run/reboot-required` is set after the
 	apt upgrade. To reboot only the K3s cluster, use
 	[`playbooks/k3s-dev-reboot.yml`](docs/k3s-ops.md#safe-rolling-reboot).
+	Proxmox hosts are never auto-rebooted by either path — see
+	[docs/proxmox-ops.md](docs/proxmox-ops.md#reboot-policy).
 
-	Proxmox hosts are **never** auto-rebooted — they run VMs, so the
-	reboot decision belongs to a human. `os_upgrade` will patch packages
-	on Proxmox but leave any pending reboot for you to schedule.
-
-For K3s cluster install, upgrades, node add/remove, kubeconfig fetch, snapshots, and health checks, see [docs/k3s-ops.md](docs/k3s-ops.md).
+For K3s cluster install, upgrades, node add/remove, kubeconfig fetch, snapshots, and health checks, see [docs/k3s-ops.md](docs/k3s-ops.md). For Proxmox post-install setup, reboot policy, and verification, see [docs/proxmox-ops.md](docs/proxmox-ops.md).
 
 ### Ad-hoc commands
 

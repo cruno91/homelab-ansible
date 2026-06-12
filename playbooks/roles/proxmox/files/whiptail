@@ -1,0 +1,65 @@
+#!/bin/bash
+# Stub `whiptail` that returns canned answers for community-scripts'
+# post-pve-install.sh. Placed earlier in PATH than the real whiptail.
+#
+# Decides the answer from the dialog --title plus the dialog type.
+# --msgbox / --yesno return via exit code.
+# --menu prints the tag to fd 2 (stderr), NOT stdout: the script captures
+#   choices with `CHOICE=$(whiptail ... 3>&2 2>&1 1>&3)`, which swaps fd 1
+#   and fd 2 because real whiptail writes to stderr. Writing to fd 1 here
+#   would land outside the $() capture and every menu would silently return
+#   empty.
+# If upstream renames a title, the default branch ("no") fires and the
+# script silently skips that step.
+set -u
+
+title=""
+mode=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --title)
+      title="$2"
+      shift 2
+      ;;
+    --menu)
+      mode="menu"
+      shift
+      ;;
+    --msgbox)
+      mode="msgbox"
+      shift
+      ;;
+    --yesno)
+      mode="yesno"
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+canned_menu_answer() {
+  case "$1" in
+    "SOURCES")                    echo "yes" >&2 ;;      # migrate Debian sources to deb822
+    "PVE-ENTERPRISE")             echo "disable" >&2 ;;
+    "CEPH-ENTERPRISE")            echo "disable" >&2 ;;
+    "PVE-NO-SUBSCRIPTION")        echo "yes" >&2 ;;
+    "CEPH PACKAGE REPOSITORIES")  echo "no" >&2 ;;
+    "PVETEST")                    echo "no" >&2 ;;
+    "SUBSCRIPTION NAG")           echo "yes" >&2 ;;
+    "HIGH AVAILABILITY")          echo "no" >&2 ;;
+    "COROSYNC")                   echo "no" >&2 ;;
+    "UPDATE")                     echo "no" >&2 ;;
+    "REBOOT")                     echo "no" >&2 ;;
+    *)                            echo "no" >&2 ;;
+  esac
+}
+
+case "$mode" in
+  msgbox) exit 0 ;;
+  yesno)  exit 0 ;;                                  # disable legacy .list sources
+  menu)   canned_menu_answer "$title"; exit 0 ;;
+  *)      exit 0 ;;
+esac

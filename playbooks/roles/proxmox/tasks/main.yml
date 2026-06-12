@@ -1,0 +1,54 @@
+---
+# Run community-scripts' post-pve-install.sh once on a fresh Proxmox node.
+# Gated by a marker file so subsequent site.yml runs are a no-op stat.
+# Re-run by removing /var/lib/proxmox-post-install.done on the node.
+
+- name: Stat post-install marker
+  ansible.builtin.stat:
+    path: /var/lib/proxmox-post-install.done
+  register: post_install_marker
+
+- name: Run Proxmox post-install (unattended)
+  when: not post_install_marker.stat.exists
+  block:
+    - name: Ensure staging dir
+      ansible.builtin.file:
+        path: /opt/proxmox-post-install
+        state: directory
+        mode: '0755'
+
+    - name: Stage canned-answers whiptail wrapper
+      ansible.builtin.copy:
+        src: whiptail
+        dest: /opt/proxmox-post-install/whiptail
+        mode: '0755'
+
+    - name: Download post-pve-install.sh
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/tools/pve/post-pve-install.sh
+        dest: /opt/proxmox-post-install/post-pve-install.sh
+        mode: '0755'
+
+    # The wrapper is dropped earlier in PATH so the script's `whiptail`
+    # calls hit it instead of the real one. `echo y` answers the single
+    # `read -p` at the top of the script.
+    - name: Run post-pve-install.sh
+      ansible.builtin.shell:
+        cmd: echo y | PATH=/opt/proxmox-post-install:$PATH /opt/proxmox-post-install/post-pve-install.sh
+      changed_when: true
+
+    - name: Mark post-install as done
+      ansible.builtin.file:
+        path: /var/lib/proxmox-post-install.done
+        state: touch
+        mode: '0644'
+
+    # Script's REBOOT prompt is answered "no" so Ansible owns the reboot
+    # and can actually wait for the node to come back.
+    - name: Reboot Proxmox node after post-install
+      ansible.builtin.reboot:
+        msg: "Reboot triggered by Ansible after Proxmox post-install"
+        reboot_timeout: 600
+        pre_reboot_delay: 5
+        post_reboot_delay: 30
+        test_command: pveversion
