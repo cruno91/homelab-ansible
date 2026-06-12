@@ -11,6 +11,16 @@
     msg: "Rolling update requires at least 2 nodes in the [k3s-dev] group."
   when: k3s_helper_node == ''
 
+- name: Wait for helper API to serve requests
+  ansible.builtin.command: k3s kubectl get --raw=/readyz
+  delegate_to: "{{ k3s_helper_node }}"
+  become: true
+  register: k3s_helper_readyz
+  retries: 30
+  delay: 10
+  until: k3s_helper_readyz.rc == 0
+  changed_when: false
+
 - name: Drain {{ ansible_hostname }}
   ansible.builtin.command: >-
     k3s kubectl drain {{ ansible_hostname }}
@@ -20,6 +30,10 @@
       --timeout=300s
   delegate_to: "{{ k3s_helper_node }}"
   become: true
+  register: k3s_drain
+  retries: 5
+  delay: 10
+  until: k3s_drain.rc == 0
   changed_when: true
 
 - name: Re-download K3s install script
@@ -42,11 +56,20 @@
   become: true
   changed_when: true
 
-- name: Wait for local K3s API to be ready again
+- name: Wait for local K3s API port to open
   ansible.builtin.wait_for:
     port: 6443
     host: "{{ ansible_facts['default_ipv4']['address'] }}"
     timeout: 300
+
+- name: Wait for local K3s API to serve requests
+  ansible.builtin.command: k3s kubectl get --raw=/readyz
+  become: true
+  register: k3s_local_readyz
+  retries: 30
+  delay: 10
+  until: k3s_local_readyz.rc == 0
+  changed_when: false
 
 - name: Wait for node to report Ready
   ansible.builtin.command: >-
