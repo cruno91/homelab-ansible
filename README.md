@@ -8,6 +8,7 @@ Current roles:
 - Manage Portainer for the simple Docker containers needed in the lab
 - Manage code-server
 - Provision and tear down a K3s dev cluster on Raspberry Pis (see [docs/k3s-ops.md](docs/k3s-ops.md))
+- Run a one-shot post-install on fresh Proxmox VE nodes (see [docs/proxmox-ops.md](docs/proxmox-ops.md))
 - Keep roles semantic and not procedural
 
 ---
@@ -20,8 +21,9 @@ Current roles:
 | `k3s-dev-node-1`   | K3s dev cluster — server + worker (bootstrap) | Raspberry Pi OS Lite |
 | `k3s-dev-node-2`   | K3s dev cluster — server + worker             | Raspberry Pi OS Lite |
 | `k3s-dev-node-3`   | K3s dev cluster — server + worker             | Raspberry Pi OS Lite |
+| `proxmox-node-1`   | Proxmox VE hypervisor                         | Proxmox VE 9.2.2     |
 
-All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd) and are untainted, so they also schedule workloads. K3s-specific ops live in [docs/k3s-ops.md](docs/k3s-ops.md).
+All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd) and are untainted, so they also schedule workloads. K3s-specific ops live in [docs/k3s-ops.md](docs/k3s-ops.md). Proxmox-specific ops live in [docs/proxmox-ops.md](docs/proxmox-ops.md).
 
 ---
 
@@ -29,7 +31,8 @@ All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd)
 
 ```text
 ├── docs
-│ └── k3s-ops.md
+│ ├── k3s-ops.md
+│ └── proxmox-ops.md
 ├── inventory
 │ ├── group_vars
 │ │ ├── all.yml
@@ -65,7 +68,12 @@ All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd)
 │ │ │ │ └── update.yml
 │ │ │ └── templates
 │ │ │     └── kube-vip.yaml.j2
-│ │ └── portainer
+│ │ ├── portainer
+│ │ │ └── tasks
+│ │ │     └── main.yml
+│ │ └── proxmox
+│ │     ├── files
+│ │     │ └── whiptail
 │ │     └── tasks
 │ │         └── main.yml
 │ └── site.yml
@@ -115,13 +123,16 @@ All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd)
 	ansible-playbook -i inventory/hosts.ini playbooks/site.yml --ask-become-pass --tags manual_reboot
 	```
 
-	Non-K3s hosts reboot in parallel. K3s dev nodes reboot one at a time
-	with drain → reboot → wait-for-Ready → uncordon, so etcd quorum is
-	preserved. The `os_upgrade` tag uses the same safe path on K3s nodes
-	when `/var/run/reboot-required` is set after the apt upgrade. To reboot
-	only the K3s cluster, use [`playbooks/k3s-dev-reboot.yml`](docs/k3s-ops.md#safe-rolling-reboot).
+	Non-K3s, non-Proxmox hosts reboot in parallel. K3s dev nodes reboot
+	one at a time with drain → reboot → wait-for-Ready → uncordon, so
+	etcd quorum is preserved. The `os_upgrade` tag uses the same safe
+	path on K3s nodes when `/var/run/reboot-required` is set after the
+	apt upgrade. To reboot only the K3s cluster, use
+	[`playbooks/k3s-dev-reboot.yml`](docs/k3s-ops.md#safe-rolling-reboot).
+	Proxmox hosts are never auto-rebooted by either path — see
+	[docs/proxmox-ops.md](docs/proxmox-ops.md#reboot-policy).
 
-For K3s cluster install, upgrades, node add/remove, kubeconfig fetch, snapshots, and health checks, see [docs/k3s-ops.md](docs/k3s-ops.md).
+For K3s cluster install, upgrades, node add/remove, kubeconfig fetch, snapshots, and health checks, see [docs/k3s-ops.md](docs/k3s-ops.md). For Proxmox post-install setup, reboot policy, and verification, see [docs/proxmox-ops.md](docs/proxmox-ops.md).
 
 ### Ad-hoc commands
 
