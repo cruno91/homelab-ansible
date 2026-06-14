@@ -1,0 +1,10 @@
+---
+- name: Rolling update of RKE2 mgmt cluster
+  hosts: rke2-mgmt
+  gather_facts: true
+  serial: 1
+  any_errors_fatal: true
+  vars:
+    rke2_action: update
+  roles:
+    - rke2

@@ -1,0 +1,23 @@
+---
+# Play 1: Uninstall RKE2 from non-primary nodes first
+- name: Uninstall RKE2 from additional nodes
+  hosts: rke2-mgmt
+  gather_facts: false
+  serial: 1
+  any_errors_fatal: true
+  vars:
+    rke2_action: uninstall
+    rke2_skip_primary: true
+  roles:
+    - rke2
+
+# Play 2: Uninstall RKE2 from the primary server last
+- name: Uninstall RKE2 from primary server
+  hosts: rke2-mgmt[0]
+  gather_facts: false
+  any_errors_fatal: true
+  vars:
+    rke2_action: uninstall
+    rke2_skip_primary: false
+  roles:
+    - rke2

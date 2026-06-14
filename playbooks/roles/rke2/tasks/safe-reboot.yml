@@ -1,0 +1,104 @@
+---
+# One-at-a-time reboot for an RKE2 mgmt node. Caller play must use serial: 1.
+# Drains via a helper node, reboots, waits for the local RKE2 API and node
+# Ready, then uncordons — same shape as update.yml so etcd quorum (2-of-3)
+# is preserved.
+#
+# Inputs:
+#   rke2_reboot_force (bool, default false)
+#     true  → always reboot the node
+#     false → only reboot if /var/run/reboot-required exists on the node
+- name: Check if reboot is required
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: rke2_reboot_required
+
+- name: Skip safe reboot for this host (no reboot needed)
+  ansible.builtin.meta: end_host
+  when:
+    - not (rke2_reboot_force | default(false) | bool)
+    - not rke2_reboot_required.stat.exists
+
+- name: Determine helper node for drain/uncordon
+  ansible.builtin.set_fact:
+    rke2_helper_node: "{{ (groups['rke2-mgmt'] | reject('equalto', inventory_hostname) | list)[0] | default('') }}"
+
+- name: Fail if no helper node is available
+  ansible.builtin.fail:
+    msg: "Safe reboot requires at least 2 nodes in the [rke2-mgmt] group."
+  when: rke2_helper_node == ''
+
+- name: Wait for helper API to serve requests
+  ansible.builtin.command: "{{ rke2_bin_dir }}/kubectl get --raw=/readyz"
+  environment:
+    KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
+  delegate_to: "{{ rke2_helper_node }}"
+  become: true
+  register: rke2_helper_readyz
+  retries: 30
+  delay: 10
+  until: rke2_helper_readyz.rc == 0
+  changed_when: false
+
+- name: Drain node before reboot — {{ ansible_hostname }}
+  ansible.builtin.command: >-
+    {{ rke2_bin_dir }}/kubectl drain {{ ansible_hostname }}
+      --ignore-daemonsets
+      --delete-emptydir-data
+      --force
+      --timeout=300s
+  environment:
+    KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
+  delegate_to: "{{ rke2_helper_node }}"
+  become: true
+  register: rke2_drain
+  retries: 5
+  delay: 10
+  until: rke2_drain.rc == 0
+  changed_when: true
+
+- name: Reboot {{ ansible_hostname }}
+  ansible.builtin.reboot:
+    msg: "Reboot triggered by Ansible (rke2 safe-reboot)"
+    reboot_timeout: 600
+    pre_reboot_delay: 10
+    post_reboot_delay: 30
+    test_command: whoami
+  become: true
+
+- name: Wait for local RKE2 API port to open
+  ansible.builtin.wait_for:
+    port: 6443
+    host: "{{ ansible_facts['default_ipv4']['address'] }}"
+    timeout: 600
+
+- name: Wait for local RKE2 API to serve requests
+  ansible.builtin.command: "{{ rke2_bin_dir }}/kubectl get --raw=/readyz"
+  environment:
+    KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
+  become: true
+  register: rke2_local_readyz
+  retries: 30
+  delay: 10
+  until: rke2_local_readyz.rc == 0
+  changed_when: false
+
+- name: Wait for node to report Ready
+  ansible.builtin.command: >-
+    {{ rke2_bin_dir }}/kubectl wait
+      --for=condition=Ready
+      node/{{ ansible_hostname }}
+      --timeout=300s
+  environment:
+    KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
+  delegate_to: "{{ rke2_helper_node }}"
+  become: true
+  changed_when: false
+
+- name: Uncordon {{ ansible_hostname }}
+  ansible.builtin.command: "{{ rke2_bin_dir }}/kubectl uncordon {{ ansible_hostname }}"
+  environment:
+    KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
+  delegate_to: "{{ rke2_helper_node }}"
+  become: true
+  changed_when: true

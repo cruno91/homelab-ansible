@@ -1,0 +1,40 @@
+# Cluster identity
+rke2_cluster_name: rke2-mgmt
+
+# Control plane VIP (managed by kube-vip). Reachable on :6443 (kube API)
+# and :9345 (RKE2 supervisor / join port).
+rke2_vip: 10.0.3.40
+
+# Pin RKE2 release. Empty channel/version → install script default ("stable" channel).
+# Set either rke2_channel ("stable" / "latest" / "v1.31") or rke2_version
+# ("v1.31.5+rke2r1"). Bumping either + running playbooks/rke2-mgmt-update.yml
+# performs a rolling upgrade.
+rke2_channel: "stable"
+rke2_version: ""
+# rke2_version: "v1.34.4+rke2r1"
+
+# Embedded-etcd snapshot management (server-side, in-tree).
+rke2_etcd_snapshot_cron: "0 */6 * * *"
+rke2_etcd_snapshot_retention: 10
+rke2_etcd_snapshot_dir: /var/lib/rancher/rke2/server/db/snapshots
+
+# Network interface for kube-vip ARP. The Proxmox VMs in this fleet expose the
+# primary NIC as `eth0` (cloud-init/predictable-names disabled). Override per-host
+# if a node uses a different NIC name.
+kubevip_iface: eth0
+
+# kube-vip container version
+kubevip_version: v1.0.4
+
+# RKE2 install script location
+rke2_install_script: /tmp/rke2-install.sh
+
+# RKE2 filesystem paths
+rke2_config_dir: /etc/rancher/rke2
+rke2_data_dir: /var/lib/rancher/rke2
+rke2_manifests_dir: /var/lib/rancher/rke2/server/manifests
+rke2_bin_dir: /var/lib/rancher/rke2/bin
+rke2_kubeconfig_remote: /etc/rancher/rke2/rke2.yaml
+
+# Local destination for fetched kubeconfig.
+rke2_kubeconfig_local: "{{ playbook_dir }}/../kubeconfig-{{ rke2_cluster_name }}.yaml"

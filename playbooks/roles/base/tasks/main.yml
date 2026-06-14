@@ -42,10 +42,11 @@
     enabled: true
   become: true
 
-# K3s-dev nodes are rebooted by the safe-reboot play (drain → reboot →
-# wait Ready → uncordon) so etcd quorum is preserved. Proxmox hosts are
-# never auto-rebooted — they run VMs and the reboot decision belongs to
-# a human. Skip the simple reboot path here for both.
+# K3s-dev and RKE2-mgmt nodes are rebooted by their safe-reboot plays
+# (drain → reboot → wait Ready → uncordon) so etcd quorum is preserved.
+# Proxmox hosts are never auto-rebooted — they run VMs and the reboot
+# decision belongs to a human. Skip the simple reboot path here for all
+# three.
 - name: Reboot system if required
   ansible.builtin.reboot:
     msg: "Reboot triggered by Ansible after OS upgrade"
@@ -56,6 +57,7 @@
   when:
     - reboot_required.stat.exists
     - "'k3s-dev' not in group_names"
+    - "'rke2-mgmt' not in group_names"
     - "'proxmox' not in group_names"
   become: true
   tags: [never, os_upgrade]
@@ -69,6 +71,7 @@
     test_command: whoami
   when:
     - "'k3s-dev' not in group_names"
+    - "'rke2-mgmt' not in group_names"
     - "'proxmox' not in group_names"
   become: true
   tags: [never, manual_reboot]

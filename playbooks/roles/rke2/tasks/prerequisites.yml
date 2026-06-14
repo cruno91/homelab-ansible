@@ -1,0 +1,43 @@
+---
+# Ubuntu Server VM prerequisites for RKE2. The Pi-flavored equivalent
+# (cgroup_memory, /boot/firmware/cmdline.txt) doesn't apply here — these
+# are vanilla cloud-init Ubuntu guests on Proxmox.
+- name: Ensure base packages installed
+  ansible.builtin.apt:
+    name:
+      - curl
+      - iptables
+      - nfs-common
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+# Kubelet refuses to start if swap is on. Cloud-init Ubuntu images usually
+# ship without swap, but check and disable defensively so a host with swap
+# enabled doesn't silently bork kubelet.
+- name: Read /etc/fstab
+  ansible.builtin.slurp:
+    src: /etc/fstab
+  register: rke2_fstab
+  become: true
+
+- name: Disable swap entries in /etc/fstab
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: '^([^#].*\s+swap\s+.*)$'
+    replace: '# \1'
+  become: true
+  when: "'swap' in (rke2_fstab.content | b64decode)"
+
+- name: Get active swap devices
+  ansible.builtin.command: swapon --noheadings --show=NAME
+  register: rke2_swap_active
+  changed_when: false
+  become: true
+
+- name: Turn swap off
+  ansible.builtin.command: swapoff -a
+  become: true
+  when: rke2_swap_active.stdout | trim | length > 0
+  changed_when: true

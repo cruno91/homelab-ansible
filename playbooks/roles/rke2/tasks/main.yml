@@ -1,0 +1,24 @@
+---
+- name: Include RKE2 prerequisites
+  ansible.builtin.include_tasks: prerequisites.yml
+  when: rke2_action == "install"
+
+- name: Include RKE2 install tasks
+  ansible.builtin.include_tasks: install.yml
+  when: rke2_action == "install"
+
+- name: Include RKE2 rolling-update tasks
+  ansible.builtin.include_tasks: update.yml
+  when: rke2_action == "update"
+
+- name: Include RKE2 safe-reboot tasks
+  ansible.builtin.include_tasks: safe-reboot.yml
+  when: rke2_action == "safe_reboot"
+
+- name: Include RKE2 uninstall tasks
+  ansible.builtin.include_tasks: uninstall.yml
+  when: rke2_action == "uninstall"
+
+- name: Fetch kubeconfig from primary server
+  ansible.builtin.include_tasks: fetch-kubeconfig.yml
+  when: rke2_action == "fetch_kubeconfig"

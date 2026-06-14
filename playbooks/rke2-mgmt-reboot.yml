@@ -1,0 +1,14 @@
+---
+# Safe rolling reboot of the RKE2 mgmt cluster. One node at a time:
+# drain → reboot → wait for RKE2 API → wait for Ready → uncordon.
+# Use --limit to reboot a subset; otherwise all three nodes are rebooted.
+- name: Rolling reboot of RKE2 mgmt cluster
+  hosts: rke2-mgmt
+  gather_facts: true
+  serial: 1
+  any_errors_fatal: true
+  vars:
+    rke2_action: safe_reboot
+    rke2_reboot_force: true
+  roles:
+    - rke2

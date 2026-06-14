@@ -1,0 +1,169 @@
+---
+- name: Ensure RKE2 config dir exists
+  ansible.builtin.file:
+    path: "{{ rke2_config_dir }}"
+    state: directory
+    mode: "0755"
+  become: true
+
+# kube-vip auto-applies from the RKE2 server-manifests dir on the bootstrap
+# node. RKE2 reconciles the cluster-wide DaemonSet from there; we only stage
+# on one node. Created before install so RKE2 picks them up on first start.
+- name: Ensure RKE2 manifests dir exists
+  ansible.builtin.file:
+    path: "{{ rke2_manifests_dir }}"
+    state: directory
+    mode: "0755"
+  become: true
+  when: inventory_hostname == groups['rke2-mgmt'][0]
+
+- name: Stage kube-vip RBAC manifest
+  ansible.builtin.copy:
+    src: kube-vip-rbac.yaml
+    dest: "{{ rke2_manifests_dir }}/kube-vip-rbac.yaml"
+    mode: "0644"
+  become: true
+  when: inventory_hostname == groups['rke2-mgmt'][0]
+
+- name: Stage kube-vip daemonset manifest
+  ansible.builtin.template:
+    src: kube-vip.yaml.j2
+    dest: "{{ rke2_manifests_dir }}/kube-vip.yaml"
+    mode: "0644"
+  become: true
+  when: inventory_hostname == groups['rke2-mgmt'][0]
+
+- name: Check if RKE2 is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/rke2
+  register: rke2_binary
+
+- name: Download RKE2 install script
+  ansible.builtin.get_url:
+    url: https://get.rke2.io
+    dest: "{{ rke2_install_script }}"
+    mode: "0755"
+  when: not rke2_binary.stat.exists
+
+# First server: write config without server/token, install, start, capture token.
+- name: Stage bootstrap config for first server
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ rke2_config_dir }}/config.yaml"
+    mode: "0600"
+  become: true
+  when: inventory_hostname == groups['rke2-mgmt'][0]
+
+- name: Install RKE2 on first server
+  ansible.builtin.command: "{{ rke2_install_script }}"
+  args:
+    creates: /usr/local/bin/rke2
+  environment:
+    INSTALL_RKE2_TYPE: server
+    INSTALL_RKE2_CHANNEL: "{{ rke2_channel | default('') }}"
+    INSTALL_RKE2_VERSION: "{{ rke2_version | default('') }}"
+  become: true
+  when: inventory_hostname == groups['rke2-mgmt'][0]
+
+# Unlike k3s, the RKE2 install script does not start the unit. Enable + start
+# explicitly. Idempotent — systemd no-ops if already active.
+- name: Enable and start rke2-server on first server
+  ansible.builtin.systemd:
+    name: rke2-server
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+  when: inventory_hostname == groups['rke2-mgmt'][0]
+
+- name: Wait for RKE2 supervisor port on first server
+  ansible.builtin.wait_for:
+    port: 9345
+    host: "{{ ansible_facts['default_ipv4']['address'] }}"
+    timeout: 300
+  when:
+    - inventory_hostname == groups['rke2-mgmt'][0]
+    - not ansible_check_mode
+
+- name: Wait for RKE2 API server on first server
+  ansible.builtin.wait_for:
+    port: 6443
+    host: "{{ ansible_facts['default_ipv4']['address'] }}"
+    timeout: 300
+  when:
+    - inventory_hostname == groups['rke2-mgmt'][0]
+    - not ansible_check_mode
+
+- name: Read RKE2 cluster token
+  ansible.builtin.slurp:
+    src: "{{ rke2_data_dir }}/server/node-token"
+  register: rke2_token_raw
+  become: true
+  when:
+    - inventory_hostname == groups['rke2-mgmt'][0]
+    - not ansible_check_mode
+
+- name: Set cluster token fact
+  ansible.builtin.set_fact:
+    rke2_cluster_token: "{{ rke2_token_raw.content | b64decode | trim }}"
+  when:
+    - inventory_hostname == groups['rke2-mgmt'][0]
+    - not ansible_check_mode
+
+# Joining servers: write config with server/token from bootstrap node, then install + start.
+- name: Stage join config for additional servers
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ rke2_config_dir }}/config.yaml"
+    mode: "0600"
+  vars:
+    rke2_cluster_token: "{{ hostvars[groups['rke2-mgmt'][0]].rke2_cluster_token | default('') }}"
+  become: true
+  when:
+    - inventory_hostname != groups['rke2-mgmt'][0]
+    - not ansible_check_mode
+
+- name: Install RKE2 on joining server
+  ansible.builtin.command: "{{ rke2_install_script }}"
+  args:
+    creates: /usr/local/bin/rke2
+  environment:
+    INSTALL_RKE2_TYPE: server
+    INSTALL_RKE2_CHANNEL: "{{ rke2_channel | default('') }}"
+    INSTALL_RKE2_VERSION: "{{ rke2_version | default('') }}"
+  become: true
+  when:
+    - inventory_hostname != groups['rke2-mgmt'][0]
+    - not ansible_check_mode
+
+- name: Enable and start rke2-server on joining server
+  ansible.builtin.systemd:
+    name: rke2-server
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+  when:
+    - inventory_hostname != groups['rke2-mgmt'][0]
+    - not ansible_check_mode
+
+- name: Wait for local RKE2 API port to open on joining server
+  ansible.builtin.wait_for:
+    port: 6443
+    host: "{{ ansible_facts['default_ipv4']['address'] }}"
+    timeout: 600
+  when:
+    - inventory_hostname != groups['rke2-mgmt'][0]
+    - not ansible_check_mode
+
+# Drop a profile shim so an operator who SSHes in gets kubectl/crictl/ctr
+# on PATH and KUBECONFIG already set. Tasks in this role still use the
+# full binary path explicitly so they never depend on this.
+- name: Install /etc/profile.d shim for rke2 bin + kubeconfig
+  ansible.builtin.copy:
+    dest: /etc/profile.d/rke2.sh
+    mode: "0644"
+    content: |
+      export PATH=$PATH:{{ rke2_bin_dir }}
+      export KUBECONFIG={{ rke2_kubeconfig_remote }}
+  become: true
