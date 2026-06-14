@@ -56,7 +56,7 @@ spec:
             - name: vip_retryperiod
               value: "1"
             - name: address
-              value: "{{ rke2_vip }}"
+              value: "{{ kubevip_vip_address }}"
           securityContext:
             capabilities:
               add:

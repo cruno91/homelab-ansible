@@ -9,6 +9,7 @@ Current roles:
 - Manage code-server
 - Provision and tear down a K3s dev cluster on Raspberry Pis (see [docs/k3s-ops.md](docs/k3s-ops.md))
 - Provision and tear down the RKE2 management cluster on Proxmox VMs (see [docs/rke2-mgmt-ops.md](docs/rke2-mgmt-ops.md))
+- Share a single `kubevip` role between both clusters for the ARP-mode control-plane VIP
 - Run a one-shot post-install on fresh Proxmox VE nodes (see [docs/proxmox-ops.md](docs/proxmox-ops.md))
 - Keep roles semantic and not procedural
 
@@ -69,15 +70,18 @@ All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd)
 │ │ │ └── tasks
 │ │ │     └── main.yml
 │ │ ├── k3s
+│ │ │ └── tasks
+│ │ │     ├── fetch-kubeconfig.yml
+│ │ │     ├── install.yml
+│ │ │     ├── main.yml
+│ │ │     ├── rpi-prerequisites.yml
+│ │ │     ├── uninstall.yml
+│ │ │     └── update.yml
+│ │ ├── kubevip
 │ │ │ ├── files
 │ │ │ │ └── kube-vip-rbac.yaml
 │ │ │ ├── tasks
-│ │ │ │ ├── fetch-kubeconfig.yml
-│ │ │ │ ├── install.yml
-│ │ │ │ ├── main.yml
-│ │ │ │ ├── rpi-prerequisites.yml
-│ │ │ │ ├── uninstall.yml
-│ │ │ │ └── update.yml
+│ │ │ │ └── main.yml
 │ │ │ └── templates
 │ │ │     └── kube-vip.yaml.j2
 │ │ ├── portainer
@@ -89,8 +93,6 @@ All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd)
 │ │ │ └── tasks
 │ │ │     └── main.yml
 │ │ └── rke2
-│ │     ├── files
-│ │     │ └── kube-vip-rbac.yaml
 │ │     ├── tasks
 │ │     │ ├── fetch-kubeconfig.yml
 │ │     │ ├── install.yml
@@ -100,8 +102,7 @@ All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd)
 │ │     │ ├── uninstall.yml
 │ │     │ └── update.yml
 │ │     └── templates
-│ │         ├── config.yaml.j2
-│ │         └── kube-vip.yaml.j2
+│ │         └── config.yaml.j2
 │ └── site.yml
 ```
 

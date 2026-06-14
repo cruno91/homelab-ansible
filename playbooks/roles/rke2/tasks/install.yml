@@ -8,29 +8,13 @@
 
 # kube-vip auto-applies from the RKE2 server-manifests dir on the bootstrap
 # node. RKE2 reconciles the cluster-wide DaemonSet from there; we only stage
-# on one node. Created before install so RKE2 picks them up on first start.
-- name: Ensure RKE2 manifests dir exists
-  ansible.builtin.file:
-    path: "{{ rke2_manifests_dir }}"
-    state: directory
-    mode: "0755"
-  become: true
-  when: inventory_hostname == groups['rke2-mgmt'][0]
-
-- name: Stage kube-vip RBAC manifest
-  ansible.builtin.copy:
-    src: kube-vip-rbac.yaml
-    dest: "{{ rke2_manifests_dir }}/kube-vip-rbac.yaml"
-    mode: "0644"
-  become: true
-  when: inventory_hostname == groups['rke2-mgmt'][0]
-
-- name: Stage kube-vip daemonset manifest
-  ansible.builtin.template:
-    src: kube-vip.yaml.j2
-    dest: "{{ rke2_manifests_dir }}/kube-vip.yaml"
-    mode: "0644"
-  become: true
+# on one node. Staged before install so RKE2 picks them up on first start.
+- name: Stage kube-vip manifests on bootstrap node
+  ansible.builtin.include_role:
+    name: kubevip
+  vars:
+    kubevip_manifests_dir: "{{ rke2_manifests_dir }}"
+    kubevip_vip_address: "{{ rke2_vip }}"
   when: inventory_hostname == groups['rke2-mgmt'][0]
 
 - name: Check if RKE2 is already installed

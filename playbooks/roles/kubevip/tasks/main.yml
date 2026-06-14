@@ -1,0 +1,28 @@
+---
+# Stages the kube-vip ARP DaemonSet + RBAC into the caller's server-manifests dir
+# (K3s or RKE2 auto-applies). Caller decides which host to run on with a `when:`
+# at the include site (typically the bootstrap node only — the resulting
+# DaemonSet is cluster-wide). Caller must pass:
+#   kubevip_manifests_dir  — server-manifests path for the distro
+#   kubevip_vip_address    — the VIP to advertise
+# Group-vars on each cluster supply the shared `kubevip_iface` + `kubevip_version`.
+- name: Ensure server-manifests dir exists
+  ansible.builtin.file:
+    path: "{{ kubevip_manifests_dir }}"
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: Stage kube-vip RBAC manifest
+  ansible.builtin.copy:
+    src: kube-vip-rbac.yaml
+    dest: "{{ kubevip_manifests_dir }}/kube-vip-rbac.yaml"
+    mode: "0644"
+  become: true
+
+- name: Stage kube-vip daemonset manifest
+  ansible.builtin.template:
+    src: kube-vip.yaml.j2
+    dest: "{{ kubevip_manifests_dir }}/kube-vip.yaml"
+    mode: "0644"
+  become: true
