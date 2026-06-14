@@ -65,3 +65,44 @@
   roles:
     - k3s
   tags: [never, manual_reboot]
+
+# RKE2 mgmt nodes apply baseline one at a time so the cluster is never
+# broadly disturbed. The base role's reboot tasks self-skip for rke2-mgmt
+# hosts; the safe-reboot plays below own the reboot, drain, and re-Ready
+# dance.
+- name: Baseline management for RKE2 mgmt cluster
+  hosts: rke2-mgmt
+  gather_facts: true
+  serial: 1
+  any_errors_fatal: true
+  roles:
+    - base
+
+# Triggered only by --tags os_upgrade. Each node reboots only if
+# /var/run/reboot-required exists; the safe-reboot task file checks that
+# and end_hosts itself when there is no work to do.
+- name: Safe rolling reboot for RKE2 mgmt cluster (if required after OS upgrade)
+  hosts: rke2-mgmt
+  gather_facts: true
+  serial: 1
+  any_errors_fatal: true
+  vars:
+    rke2_action: safe_reboot
+    rke2_reboot_force: false
+  roles:
+    - rke2
+  tags: [never, os_upgrade]
+
+# Triggered only by --tags manual_reboot. Always reboots, drained one at
+# a time so etcd quorum (2-of-3) is preserved.
+- name: Safe rolling manual reboot for RKE2 mgmt cluster
+  hosts: rke2-mgmt
+  gather_facts: true
+  serial: 1
+  any_errors_fatal: true
+  vars:
+    rke2_action: safe_reboot
+    rke2_reboot_force: true
+  roles:
+    - rke2
+  tags: [never, manual_reboot]

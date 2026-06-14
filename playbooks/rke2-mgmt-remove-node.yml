@@ -1,0 +1,60 @@
+---
+# Remove a single non-bootstrap node from the RKE2 mgmt cluster.
+# Usage: --extra-vars "target_node=<inventory hostname in [rke2-mgmt]>"
+- name: Validate node removal request
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Ensure target_node is set and safe to remove
+      ansible.builtin.assert:
+        that:
+          - target_node is defined
+          - target_node in groups['rke2-mgmt']
+          - target_node != groups['rke2-mgmt'][0]
+        fail_msg: |
+          Pass --extra-vars "target_node=<hostname>" naming a non-bootstrap
+          node in the [rke2-mgmt] group. The bootstrap node ({{ groups['rke2-mgmt'][0] }})
+          cannot be removed via this playbook because the install playbook
+          treats it as the cluster's source of truth. To replace the bootstrap
+          node, restore from an etcd snapshot instead.
+
+# Gather facts on the target so we can resolve its system hostname (the name
+# RKE2 registers it under, which may differ from its inventory hostname).
+- name: Gather facts from target node
+  hosts: "{{ target_node }}"
+  gather_facts: true
+  tasks: []
+
+- name: Drain and delete target node from cluster
+  hosts: "{{ groups['rke2-mgmt'] | reject('equalto', target_node) | list | first }}"  # noqa: syntax-check[specific]
+  gather_facts: false
+  vars:
+    rke2_node_name: "{{ hostvars[target_node].ansible_hostname }}"
+  tasks:
+    - name: Drain {{ rke2_node_name }}
+      ansible.builtin.command: >-
+        {{ rke2_bin_dir }}/kubectl drain {{ rke2_node_name }}
+          --ignore-daemonsets
+          --delete-emptydir-data
+          --force
+          --timeout=300s
+      environment:
+        KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
+      become: true
+      changed_when: true
+
+    - name: Delete node object from cluster
+      ansible.builtin.command: "{{ rke2_bin_dir }}/kubectl delete node {{ rke2_node_name }}"
+      environment:
+        KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
+      become: true
+      changed_when: true
+
+- name: Uninstall RKE2 from {{ target_node }}
+  hosts: "{{ target_node }}"
+  gather_facts: false
+  vars:
+    rke2_action: uninstall
+    rke2_skip_primary: false
+  roles:
+    - rke2

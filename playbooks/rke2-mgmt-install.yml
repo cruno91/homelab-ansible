@@ -1,0 +1,42 @@
+---
+# Pre-flight: gather install state from every node in parallel so the
+# bootstrap-integrity check can compare across the group.
+- name: Pre-flight checks for RKE2 mgmt cluster
+  hosts: rke2-mgmt
+  gather_facts: false
+  tasks:
+    - name: Check whether RKE2 is already installed
+      ansible.builtin.stat:
+        path: /usr/local/bin/rke2
+      register: rke2_installed
+
+- name: Validate bootstrap node integrity
+  hosts: rke2-mgmt
+  gather_facts: false
+  run_once: true
+  tasks:
+    - name: Fail if bootstrap node missing RKE2 but other nodes have it
+      ansible.builtin.fail:
+        msg: |
+          Bootstrap node {{ groups['rke2-mgmt'][0] }} has no RKE2 installed,
+          but other rke2-mgmt nodes do. Running install would form a NEW
+          cluster on the bootstrap node and orphan the existing one.
+
+          Recovery options:
+            - Restore {{ groups['rke2-mgmt'][0] }} from an etcd snapshot
+              (see docs/rke2-mgmt-ops.md), or
+            - Tear the cluster down (playbooks/rke2-mgmt-uninstall.yml) and
+              reinstall fresh.
+      when:
+        - not hostvars[groups['rke2-mgmt'][0]].rke2_installed.stat.exists
+        - groups['rke2-mgmt'][1:] | map('extract', hostvars) | map(attribute='rke2_installed.stat.exists') | select | list | length > 0
+
+- name: Install RKE2 mgmt cluster
+  hosts: rke2-mgmt
+  gather_facts: true
+  serial: 1
+  any_errors_fatal: true
+  vars:
+    rke2_action: install
+  roles:
+    - rke2

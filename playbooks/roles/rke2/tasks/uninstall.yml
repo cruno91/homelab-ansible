@@ -1,0 +1,56 @@
+---
+- name: Skip primary node (handled in separate play)
+  ansible.builtin.meta: end_host
+  when: rke2_skip_primary | default(false) and inventory_hostname == groups['rke2-mgmt'][0]
+
+- name: Remove kube-vip manifests
+  ansible.builtin.file:
+    path: "{{ rke2_manifests_dir }}/{{ item }}"
+    state: absent
+  loop:
+    - kube-vip.yaml
+    - kube-vip-rbac.yaml
+  become: true
+
+# RKE2 ships rke2-killall.sh (stop containers + processes) and
+# rke2-uninstall.sh (remove binaries, units, data dirs). Killall first so
+# uninstall finds nothing running; both are no-ops if missing.
+- name: Check for RKE2 killall script
+  ansible.builtin.stat:
+    path: /usr/local/bin/rke2-killall.sh
+  register: rke2_killall
+
+- name: Run RKE2 killall script
+  ansible.builtin.command: /usr/local/bin/rke2-killall.sh
+  become: true
+  when: rke2_killall.stat.exists
+  changed_when: true
+
+- name: Check for RKE2 uninstall script
+  ansible.builtin.stat:
+    path: /usr/local/bin/rke2-uninstall.sh
+  register: rke2_uninstall
+
+- name: Run RKE2 uninstall script
+  ansible.builtin.command: /usr/local/bin/rke2-uninstall.sh
+  become: true
+  when: rke2_uninstall.stat.exists
+  changed_when: true
+
+- name: Verify RKE2 binary is removed
+  ansible.builtin.file:
+    path: /usr/local/bin/rke2
+    state: absent
+  become: true
+
+- name: Remove RKE2 config directory
+  ansible.builtin.file:
+    path: "{{ rke2_config_dir }}"
+    state: absent
+  become: true
+
+- name: Remove rke2 profile shim
+  ansible.builtin.file:
+    path: /etc/profile.d/rke2.sh
+    state: absent
+  become: true

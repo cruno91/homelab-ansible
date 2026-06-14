@@ -1,0 +1,105 @@
+---
+# Rolling RKE2 upgrade for one node. Caller play must use serial: 1.
+# Drains via a helper node, re-runs the install script, restarts rke2-server,
+# waits for Ready, then uncordons.
+- name: Determine helper node for drain/uncordon
+  ansible.builtin.set_fact:
+    rke2_helper_node: "{{ (groups['rke2-mgmt'] | reject('equalto', inventory_hostname) | list)[0] | default('') }}"
+
+- name: Fail if no helper node is available
+  ansible.builtin.fail:
+    msg: "Rolling update requires at least 2 nodes in the [rke2-mgmt] group."
+  when: rke2_helper_node == ''
+
+- name: Wait for helper API to serve requests
+  ansible.builtin.command: "{{ rke2_bin_dir }}/kubectl get --raw=/readyz"
+  environment:
+    KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
+  delegate_to: "{{ rke2_helper_node }}"
+  become: true
+  register: rke2_helper_readyz
+  retries: 30
+  delay: 10
+  until: rke2_helper_readyz.rc == 0
+  changed_when: false
+
+- name: Drain {{ ansible_hostname }}
+  ansible.builtin.command: >-
+    {{ rke2_bin_dir }}/kubectl drain {{ ansible_hostname }}
+      --ignore-daemonsets
+      --delete-emptydir-data
+      --force
+      --timeout=300s
+  environment:
+    KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
+  delegate_to: "{{ rke2_helper_node }}"
+  become: true
+  register: rke2_drain
+  retries: 5
+  delay: 10
+  until: rke2_drain.rc == 0
+  changed_when: true
+
+- name: Re-download RKE2 install script
+  ansible.builtin.get_url:
+    url: https://get.rke2.io
+    dest: "{{ rke2_install_script }}"
+    mode: "0755"
+    force: true
+  become: true
+
+- name: Run RKE2 install script to upgrade in place
+  ansible.builtin.command: "{{ rke2_install_script }}"
+  environment:
+    INSTALL_RKE2_TYPE: server
+    INSTALL_RKE2_CHANNEL: "{{ rke2_channel | default('') }}"
+    INSTALL_RKE2_VERSION: "{{ rke2_version | default('') }}"
+  become: true
+  changed_when: true
+
+# The install script swaps binaries but does not restart the unit. Restart
+# explicitly to activate the new version + any config.yaml changes staged
+# by playbooks/rke2-mgmt-install.yml.
+- name: Restart rke2-server
+  ansible.builtin.systemd:
+    name: rke2-server
+    state: restarted
+    daemon_reload: true
+  become: true
+
+- name: Wait for local RKE2 API port to open
+  ansible.builtin.wait_for:
+    port: 6443
+    host: "{{ ansible_facts['default_ipv4']['address'] }}"
+    timeout: 600
+
+- name: Wait for local RKE2 API to serve requests
+  ansible.builtin.command: "{{ rke2_bin_dir }}/kubectl get --raw=/readyz"
+  environment:
+    KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
+  become: true
+  register: rke2_local_readyz
+  retries: 30
+  delay: 10
+  until: rke2_local_readyz.rc == 0
+  changed_when: false
+
+- name: Wait for node to report Ready
+  ansible.builtin.command: >-
+    {{ rke2_bin_dir }}/kubectl wait
+      --for=condition=Ready
+      node/{{ ansible_hostname }}
+      --timeout=300s
+  environment:
+    KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
+  delegate_to: "{{ rke2_helper_node }}"
+  become: true
+  changed_when: false
+
+- name: Uncordon {{ ansible_hostname }}
+  ansible.builtin.command: "{{ rke2_bin_dir }}/kubectl uncordon {{ ansible_hostname }}"
+  environment:
+    KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
+  delegate_to: "{{ rke2_helper_node }}"
+  become: true
+  changed_when: true
