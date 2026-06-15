@@ -1,0 +1,35 @@
+---
+# One-shot Rancher install for the rke2-mgmt cluster bootstrap.
+# Caller drives this from localhost against the fetched admin kubeconfig
+# (see playbooks/rke2-mgmt-rancher.yml). The cert-manager role must have
+# run first — Rancher's pre-install hook checks for the cert-manager
+# webhook and refuses to start without it.
+#
+# This install uses Rancher's self-signed CA (ingress.tls.source=rancher).
+# When the Cloudflare DNS-01 ClusterIssuer is wired up later (via
+# homelab-gitops), the gitops values flip to ingress.tls.source=secret and
+# point at a cert-manager-issued wildcard.
+
+- name: Ensure rancher-stable helm repo is configured
+  kubernetes.core.helm_repository:
+    name: "{{ rancher_chart_repo_name }}"
+    repo_url: "{{ rancher_chart_repo_url }}"
+
+- name: Install Rancher
+  kubernetes.core.helm:
+    name: "{{ rancher_release_name }}"
+    chart_ref: "{{ rancher_chart_ref }}"
+    chart_version: "{{ rancher_chart_version }}"
+    release_namespace: "{{ rancher_namespace }}"
+    create_namespace: true
+    kubeconfig: "{{ bootstrap_kubeconfig }}"
+    wait: true
+    wait_timeout: 15m0s
+    values:
+      hostname: "{{ rancher_hostname }}"
+      replicas: "{{ rancher_replicas }}"
+      bootstrapPassword: "{{ rancher_bootstrap_password }}"
+      ingress:
+        tls:
+          source: rancher
+  no_log: true

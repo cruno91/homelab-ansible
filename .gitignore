@@ -2,3 +2,7 @@
 .DS_Store
 kubeconfig-*.yaml
 
+# Per-group secret overrides — loaded by playbooks via vars_files (and
+# auto-merged into group_vars for inventory-group plays). Keep the
+# secrets.yml.example sibling committed as the template.
+inventory/group_vars/*/secrets.yml

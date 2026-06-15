@@ -1,0 +1,24 @@
+---
+# Bootstrap-only: installs Argo CD via Helm on the rke2-mgmt cluster.
+# This is the last manual Helm step in the homelab plan — immediately after
+# Argo is up, point it at homelab-gitops/bootstrap and let Argo manage its
+# own config (app-of-apps). From that moment, manual cluster changes are
+# bugs (operating rule #1 in the plan).
+- name: Install Argo CD on rke2-mgmt
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  # See playbooks/rke2-mgmt-certmanager.yml for the rationale — bootstrap
+  # plays run on the workstation and don't need sudo, even though
+  # group_vars/all.yml turns become on for the rest of the fleet.
+  # group_vars/all.yml sets ansible_become: true, which beats a bare
+  # `become: false` keyword for the implicit localhost — so we also set
+  # the variable form here to make the override stick.
+  become: false
+  vars:
+    ansible_become: false
+  vars_files:
+    - ../inventory/group_vars/rke2-mgmt/main.yml
+    - ../inventory/group_vars/rke2-mgmt/secrets.yml
+  roles:
+    - argocd

@@ -1,0 +1,26 @@
+---
+# One-shot cert-manager install for the rke2-mgmt cluster bootstrap.
+# Caller drives this from localhost against the fetched admin kubeconfig
+# (see playbooks/rke2-mgmt-certmanager.yml). Re-running is idempotent —
+# helm upgrade --install semantics. After Argo CD is syncing homelab-gitops,
+# version bumps stop going through Ansible and start going through Git.
+- name: Ensure Jetstack helm repo is configured
+  kubernetes.core.helm_repository:
+    name: "{{ certmanager_chart_repo_name }}"
+    repo_url: "{{ certmanager_chart_repo_url }}"
+
+# installCRDs: true is the documented bootstrap path. Argo CD will adopt the
+# release later; the gitops values file should keep installCRDs: true so the
+# CRDs stay owned by the chart and survive a Rancher / Argo CD reinstall.
+- name: Install cert-manager
+  kubernetes.core.helm:
+    name: "{{ certmanager_release_name }}"
+    chart_ref: "{{ certmanager_chart_ref }}"
+    chart_version: "{{ certmanager_chart_version }}"
+    release_namespace: "{{ certmanager_namespace }}"
+    create_namespace: true
+    kubeconfig: "{{ bootstrap_kubeconfig }}"
+    wait: true
+    wait_timeout: 10m0s
+    values:
+      installCRDs: true

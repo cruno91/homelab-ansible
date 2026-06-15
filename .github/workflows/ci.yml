@@ -35,6 +35,17 @@ jobs:
       - name: Install required Ansible collections
         run: ansible-galaxy collection install -r requirements.yml
 
+      # The rke2-mgmt bootstrap playbooks vars_files in
+      # inventory/group_vars/rke2-mgmt/secrets.yml, which is gitignored
+      # (real values live there locally; CI never holds them). Materialize
+      # placeholders so ansible-lint can load the playbooks.
+      - name: Stage placeholder secrets for lint
+        run: |
+          for example in inventory/group_vars/*/secrets.yml.example; do
+            target="${example%.example}"
+            [ -f "$target" ] || cp "$example" "$target"
+          done
+
       - name: yamllint
         run: yamllint .
 
@@ -69,6 +80,14 @@ jobs:
 
       - name: Verify inventory parses
         run: ansible-inventory -i inventory/hosts.ini --list >/dev/null
+
+      # See the matching lint-job step for why this exists.
+      - name: Stage placeholder secrets for syntax-check
+        run: |
+          for example in inventory/group_vars/*/secrets.yml.example; do
+            target="${example%.example}"
+            [ -f "$target" ] || cp "$example" "$target"
+          done
 
       - name: Syntax-check every playbook
         run: |
