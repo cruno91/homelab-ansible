@@ -33,7 +33,7 @@ Anything else (Harbor, observability, ClusterIssuers, ingress configuration, Ran
 
 ### In DNS (Rancher only)
 
-`rancher_hostname` (default `rancher.lab.example.dev`) must resolve to the RKE2 ingress entrypoint from wherever you're browsing. For the homelab plan this means the internal-DNS Pi (Phase 1 / Week 5) — until that exists, a `/etc/hosts` entry on your workstation is fine for first-login.
+`rancher_hostname` (default `rancher.yavin.internal`) must resolve to the RKE2 ingress entrypoint from wherever you're browsing. For the homelab plan this means the internal-DNS Pi (Phase 1 / Week 5) — until that exists, a `/etc/hosts` entry on your workstation is fine for first-login. Avoid `.dev` (HSTS preload) and other ICANN-allocated TLDs; `.internal` (ICANN-reserved for private use) and `.home.arpa` (RFC 8375) are the safe bets.
 
 ### Secrets file
 
@@ -63,7 +63,7 @@ Non-secret defaults live in `inventory/group_vars/rke2-mgmt/main.yml` under the 
 | `bootstrap_kubeconfig` | `main.yml` | `kubeconfig-rke2-mgmt.yaml` at repo root | The admin kubeconfig the local helm task uses |
 | `certmanager_chart_version` | `main.yml` | pinned | Bump deliberately; check Rancher compatibility before raising |
 | `rancher_chart_version` | `main.yml` | pinned | Match to the K8s minor version RKE2 is running |
-| `rancher_hostname` | `main.yml` | `rancher.lab.example.dev` | **Override per environment** — must be reachable in DNS |
+| `rancher_hostname` | `main.yml` | `rancher.yavin.internal` | **Override per environment** — must be reachable in DNS |
 | `rancher_bootstrap_password` | `secrets.yml` | placeholder | **Override locally** — value never enters git |
 | `argocd_chart_version` | `main.yml` | pinned | Bare install — extra config comes via gitops |
 
@@ -75,7 +75,7 @@ Non-secret defaults live in `inventory/group_vars/rke2-mgmt/main.yml` under the 
 
 ```bash
 ansible-playbook playbooks/rke2-mgmt-bootstrap.yml \
-  --extra-vars "rancher_hostname=rancher.lab.<your-domain>"
+  --extra-vars "rancher_hostname=rancher.<your-lab>.internal"
 ```
 
 The wrapper preflights the kubeconfig and API reachability, then imports each component playbook in order: cert-manager → Rancher → Argo CD. Re-running is safe (`helm upgrade --install` semantics on every release).

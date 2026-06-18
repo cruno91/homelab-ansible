@@ -9,6 +9,18 @@
 # When the Cloudflare DNS-01 ClusterIssuer is wired up later (via
 # homelab-gitops), the gitops values flip to ingress.tls.source=secret and
 # point at a cert-manager-issued wildcard.
+#
+# Helm 4 + rancher chart hook workaround
+# ---------------------------------------
+# Same regression that bites the argo-cd chart (see roles/argocd/tasks/main.yml):
+# Helm 4 hangs on `helm.sh/hook-delete-policy: before-hook-creation` waiting to
+# delete a hook resource that never existed, leaving the release stuck in
+# `pending-upgrade` with no manifests applied. The Rancher chart's pre-upgrade
+# Job (`helm-operation-*`) hits the same bug on `helm upgrade`. Until upstream
+# Helm fixes it, we disable hooks. The Rancher chart's pre-upgrade Job is
+# idempotent setup work (bootstrap-secret owner-ref reconciliation) that is
+# safe to skip on second-and-later revisions — the resources already exist
+# from the initial install. When Helm fixes the regression, drop disable_hook.
 
 - name: Ensure rancher-stable helm repo is configured
   kubernetes.core.helm_repository:
@@ -22,6 +34,7 @@
     chart_version: "{{ rancher_chart_version }}"
     release_namespace: "{{ rancher_namespace }}"
     create_namespace: true
+    disable_hook: true
     kubeconfig: "{{ bootstrap_kubeconfig }}"
     wait: true
     wait_timeout: 15m0s

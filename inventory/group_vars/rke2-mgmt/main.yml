@@ -83,7 +83,7 @@ rancher_chart_version: "2.14.2"
 # Hostname the Rancher UI answers on. Must resolve (publicly or via your
 # internal DNS) to the RKE2 ingress entrypoint — typically the kube-vip VIP
 # or whatever LoadBalancer/Ingress IP the mgmt cluster exposes.
-rancher_hostname: rancher.lab.example.dev
+rancher_hostname: rancher.yavin.internal
 # Replicas. RKE2 has 3 servers; the upstream default of 3 is right.
 rancher_replicas: 3
 
