@@ -95,6 +95,6 @@ jobs:
           for f in playbooks/*.yml; do
             echo "::group::syntax-check ${f}"
             ansible-playbook --syntax-check -i inventory/hosts.ini "$f" \
-              --extra-vars "target_node=k3s-dev-node-3"
+              --extra-vars "target_node=k3s-edge-node-3"
             echo "::endgroup::"
           done

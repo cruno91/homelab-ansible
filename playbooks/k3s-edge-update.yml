@@ -1,6 +1,6 @@
 ---
 - name: Rolling update of K3s cluster
-  hosts: k3s-dev
+  hosts: k3s-edge
   gather_facts: true
   serial: 1
   any_errors_fatal: true

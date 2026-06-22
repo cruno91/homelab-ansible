@@ -4,11 +4,11 @@
 # waits for Ready, then uncordons.
 - name: Determine helper node for drain/uncordon
   ansible.builtin.set_fact:
-    k3s_helper_node: "{{ (groups['k3s-dev'] | reject('equalto', inventory_hostname) | list)[0] | default('') }}"
+    k3s_helper_node: "{{ (groups['k3s-edge'] | reject('equalto', inventory_hostname) | list)[0] | default('') }}"
 
 - name: Fail if no helper node is available
   ansible.builtin.fail:
-    msg: "Rolling update requires at least 2 nodes in the [k3s-dev] group."
+    msg: "Rolling update requires at least 2 nodes in the [k3s-edge] group."
   when: k3s_helper_node == ''
 
 - name: Wait for helper API to serve requests

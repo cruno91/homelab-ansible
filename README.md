@@ -21,15 +21,15 @@ Current roles:
 |--------------------|-----------------------------------------------|----------------------|
 | `portainer-pi`     | Portainer (joined to `nginx-proxy-network`)   | Raspberry Pi OS Lite |
 | `codeserver-pi`    | code-server                                   | Raspberry Pi OS Lite |
-| `k3s-dev-node-1`   | K3s dev cluster — server + worker (bootstrap) | Raspberry Pi OS Lite |
-| `k3s-dev-node-2`   | K3s dev cluster — server + worker             | Raspberry Pi OS Lite |
-| `k3s-dev-node-3`   | K3s dev cluster — server + worker             | Raspberry Pi OS Lite |
+| `k3s-edge-node-1`   | K3s dev cluster — server + worker (bootstrap) | Raspberry Pi OS Lite |
+| `k3s-edge-node-2`   | K3s dev cluster — server + worker             | Raspberry Pi OS Lite |
+| `k3s-edge-node-3`   | K3s dev cluster — server + worker             | Raspberry Pi OS Lite |
 | `proxmox-node-1`   | Proxmox VE hypervisor                         | Proxmox VE 9.2.2     |
 | `rke2-mgmt-node-1` | RKE2 mgmt cluster — server (bootstrap)        | Ubuntu Server 26.04  |
 | `rke2-mgmt-node-2` | RKE2 mgmt cluster — server                    | Ubuntu Server 26.04  |
 | `rke2-mgmt-node-3` | RKE2 mgmt cluster — server                    | Ubuntu Server 26.04  |
 
-All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd) and are untainted, so they also schedule workloads. The same shape applies to the three rke2-mgmt VMs running on the Proxmox NUC. K3s-specific ops live in [docs/k3s-ops.md](docs/k3s-ops.md). RKE2-specific ops live in [docs/rke2-mgmt-ops.md](docs/rke2-mgmt-ops.md). Proxmox-specific ops live in [docs/proxmox-ops.md](docs/proxmox-ops.md).
+All three k3s-edge nodes run as K3s servers (HA control plane with embedded etcd) and are untainted, so they also schedule workloads. The same shape applies to the three rke2-mgmt VMs running on the Proxmox NUC. K3s-specific ops live in [docs/k3s-ops.md](docs/k3s-ops.md). RKE2-specific ops live in [docs/rke2-mgmt-ops.md](docs/rke2-mgmt-ops.md). Proxmox-specific ops live in [docs/proxmox-ops.md](docs/proxmox-ops.md).
 
 ---
 
@@ -44,7 +44,7 @@ All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd)
 ├── inventory
 │ ├── group_vars
 │ │ ├── all.yml
-│ │ ├── k3s-dev.yml
+│ │ ├── k3s-edge.yml
 │ │ └── rke2-mgmt
 │ │     ├── main.yml
 │ │     └── secrets.yml.example
@@ -53,12 +53,12 @@ All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd)
 │ └── hosts.ini
 ├── playbooks
 │ ├── codeserver.yml
-│ ├── k3s-dev-install.yml
-│ ├── k3s-dev-kubeconfig.yml
-│ ├── k3s-dev-reboot.yml
-│ ├── k3s-dev-remove-node.yml
-│ ├── k3s-dev-uninstall.yml
-│ ├── k3s-dev-update.yml
+│ ├── k3s-edge-install.yml
+│ ├── k3s-edge-kubeconfig.yml
+│ ├── k3s-edge-reboot.yml
+│ ├── k3s-edge-remove-node.yml
+│ ├── k3s-edge-uninstall.yml
+│ ├── k3s-edge-update.yml
 │ ├── portainer.yml
 │ ├── rke2-mgmt-argocd.yml
 │ ├── rke2-mgmt-bootstrap.yml
@@ -173,7 +173,7 @@ All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd)
 	cluster. The `os_upgrade` tag uses the same safe path on both when
 	`/var/run/reboot-required` is set after the apt upgrade. To reboot
 	a single cluster, use
-	[`playbooks/k3s-dev-reboot.yml`](docs/k3s-ops.md#safe-rolling-reboot)
+	[`playbooks/k3s-edge-reboot.yml`](docs/k3s-ops.md#safe-rolling-reboot)
 	or
 	[`playbooks/rke2-mgmt-reboot.yml`](docs/rke2-mgmt-ops.md#safe-rolling-reboot).
 	Proxmox hosts are never auto-rebooted by either path — see
@@ -212,7 +212,7 @@ ansible-galaxy collection install -r requirements.yml
 yamllint .
 ansible-lint
 for f in playbooks/*.yml; do
-  ansible-playbook --syntax-check "$f" --extra-vars "target_node=k3s-dev-node-3"
+  ansible-playbook --syntax-check "$f" --extra-vars "target_node=k3s-edge-node-3"
 done
 ```
 
