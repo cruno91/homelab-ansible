@@ -1,0 +1,85 @@
+---
+# One-shot Argo CD install for the rke2-mgmt cluster bootstrap.
+# Caller drives this from localhost against the fetched admin kubeconfig
+# (see playbooks/rke2-mgmt-argocd.yml). Deliberately bare: default chart
+# values, ClusterIP service, no ingress, no extra configuration.
+#
+# Right after this play, point Argo at homelab-gitops/bootstrap (app-of-apps)
+# and Argo reconfigures itself from Git. From that moment, this role should
+# not be the source of truth for Argo's config — bumps go through Git.
+#
+# Reach the UI in the meantime with:
+#   kubectl -n {{ argocd_namespace }} port-forward svc/argocd-server 8080:443
+# Initial admin password:
+#   kubectl -n {{ argocd_namespace }} get secret argocd-initial-admin-secret \
+#     -o jsonpath='{.data.password}' | base64 -d
+#
+# Helm 4 + argo-cd chart hook workaround
+# ---------------------------------------
+# The chart's `argocd-redis-secret-init` pre-install hook is annotated
+# `helm.sh/hook-delete-policy: before-hook-creation`. Under Helm 4, that
+# triggers a wait-for-delete loop on a resource that never existed, and
+# the install hangs in `pending-install` with
+#   "waiting for resources to be deleted count=1 timeout=10m0s"
+# Until upstream lands a fix, we:
+#   1. Pre-create the argocd-redis password Secret ourselves (idempotent —
+#      never regenerated, otherwise existing redis pods would reject Argo's
+#      reconnect with the new password).
+#   2. Pass disable_hook: true so helm never tries the hook's delete loop.
+# When Helm fixes the regression, drop the two redis-secret tasks and the
+# `disable_hook: true` arg.
+
+- name: Ensure argo helm repo is configured
+  kubernetes.core.helm_repository:
+    name: "{{ argocd_chart_repo_name }}"
+    repo_url: "{{ argocd_chart_repo_url }}"
+
+- name: Ensure argocd namespace exists
+  kubernetes.core.k8s:
+    kubeconfig: "{{ bootstrap_kubeconfig }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ argocd_namespace }}"
+
+- name: Check whether argocd-redis password secret already exists
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ bootstrap_kubeconfig }}"
+    api_version: v1
+    kind: Secret
+    namespace: "{{ argocd_namespace }}"
+    name: argocd-redis
+  register: argocd_redis_secret
+
+# Generates a fresh random password only on first install. Subsequent runs
+# see the secret already present and skip — keeping the existing redis
+# password stable so the running argocd pods stay happy.
+- name: Pre-create argocd-redis password secret (Helm 4 hook workaround)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ bootstrap_kubeconfig }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: argocd-redis
+        namespace: "{{ argocd_namespace }}"
+      type: Opaque
+      data:
+        auth: "{{ lookup('ansible.builtin.password', '/dev/null length=32 chars=ascii_letters,digits') | b64encode }}"
+  when: argocd_redis_secret.resources | length == 0
+  no_log: true
+
+- name: Install Argo CD
+  kubernetes.core.helm:
+    name: "{{ argocd_release_name }}"
+    chart_ref: "{{ argocd_chart_ref }}"
+    chart_version: "{{ argocd_chart_version }}"
+    release_namespace: "{{ argocd_namespace }}"
+    create_namespace: false
+    disable_hook: true
+    kubeconfig: "{{ bootstrap_kubeconfig }}"
+    wait: true
+    wait_timeout: 10m0s

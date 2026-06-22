@@ -2,3 +2,8 @@
 collections:
   - name: community.docker
   - name: community.general
+  # kubernetes.core supplies the helm + helm_repository + k8s modules used by
+  # the rke2-mgmt bootstrap playbooks (cert-manager, Rancher, Argo CD). The
+  # `helm` binary must also be on PATH on whichever host runs the helm task —
+  # for the bootstrap that host is `localhost`.
+  - name: kubernetes.core

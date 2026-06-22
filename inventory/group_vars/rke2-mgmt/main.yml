@@ -1,0 +1,100 @@
+# Cluster identity
+rke2_cluster_name: rke2-mgmt
+
+# Control plane VIP (managed by kube-vip). Reachable on :6443 (kube API)
+# and :9345 (RKE2 supervisor / join port).
+rke2_vip: 10.0.3.40
+
+# Pin RKE2 release. Empty channel/version → install script default ("stable" channel).
+# Set either rke2_channel ("stable" / "latest" / "v1.31") or rke2_version
+# ("v1.31.5+rke2r1"). Bumping either + running playbooks/rke2-mgmt-update.yml
+# performs a rolling upgrade.
+rke2_channel: "stable"
+rke2_version: ""
+# rke2_version: "v1.34.4+rke2r1"
+
+# Embedded-etcd snapshot management (server-side, in-tree).
+rke2_etcd_snapshot_cron: "0 */6 * * *"
+rke2_etcd_snapshot_retention: 10
+rke2_etcd_snapshot_dir: /var/lib/rancher/rke2/server/db/snapshots
+
+# Network interface for kube-vip ARP. The Proxmox VMs in this fleet expose the
+# primary NIC as `eth0` (cloud-init/predictable-names disabled). Override per-host
+# if a node uses a different NIC name.
+kubevip_iface: eth0
+
+# kube-vip container version
+kubevip_version: v1.0.4
+
+# RKE2 install script location
+rke2_install_script: /tmp/rke2-install.sh
+
+# RKE2 filesystem paths
+rke2_config_dir: /etc/rancher/rke2
+rke2_data_dir: /var/lib/rancher/rke2
+rke2_manifests_dir: /var/lib/rancher/rke2/server/manifests
+rke2_bin_dir: /var/lib/rancher/rke2/bin
+rke2_kubeconfig_remote: /etc/rancher/rke2/rke2.yaml
+
+# Local destination for fetched kubeconfig.
+rke2_kubeconfig_local: "{{ playbook_dir }}/../kubeconfig-{{ rke2_cluster_name }}.yaml"
+
+# ---------------------------------------------------------------------------
+# One-time Helm bootstrap (cert-manager → Rancher → Argo CD)
+# ---------------------------------------------------------------------------
+# These vars feed the rke2-mgmt-{certmanager,rancher,argocd,bootstrap} plays.
+# Everything here is one-shot: after Argo CD is up and syncing homelab-gitops,
+# upgrades and config changes for these components happen through Git, not
+# through this repo. Re-running the playbooks is still safe (helm install
+# upgrades in place) and is the intended path for the Phase 2 teardown drill.
+#
+# Chart versions are intentionally pinned. Bump deliberately; verify against
+# the upstream release notes (RKE2 / Kubernetes version compatibility for
+# Rancher in particular). Leaving these as floating "latest" turns the
+# rebuild drill into a moving target.
+#
+# Secret values (currently just rancher_bootstrap_password) live in the
+# gitignored sibling file `secrets.yml`. Copy `secrets.yml.example` to
+# `secrets.yml` and fill it in before running the bootstrap.
+
+# Helm executes from the workstation against the fetched admin kubeconfig.
+# The bootstrap plays use connection: local and read this path directly.
+bootstrap_kubeconfig: "{{ rke2_kubeconfig_local }}"
+
+# cert-manager — prerequisite for any real TLS issuance. Bootstrap installs
+# the chart with CRDs; ClusterIssuers come later via gitops once the
+# Cloudflare token + internal DNS are in place.
+certmanager_namespace: cert-manager
+certmanager_release_name: cert-manager
+certmanager_chart_repo_name: jetstack
+certmanager_chart_repo_url: https://charts.jetstack.io
+certmanager_chart_ref: jetstack/cert-manager
+certmanager_chart_version: v1.20.2
+
+# Rancher — bootstrapped with its own self-signed CA (ingress.tls.source=rancher).
+# Real Let's Encrypt wildcard via cert-manager DNS-01 comes later via gitops,
+# at which point this release gets re-templated with ingress.tls.source=secret.
+rancher_namespace: cattle-system
+rancher_release_name: rancher
+rancher_chart_repo_name: rancher-stable
+rancher_chart_repo_url: https://releases.rancher.com/server-charts/stable
+rancher_chart_ref: rancher-stable/rancher
+rancher_chart_version: "2.14.2"
+# Hostname the Rancher UI answers on. Must resolve (publicly or via your
+# internal DNS) to the RKE2 ingress entrypoint — typically the kube-vip VIP
+# or whatever LoadBalancer/Ingress IP the mgmt cluster exposes.
+rancher_hostname: rancher.yavin.internal
+# Replicas. RKE2 has 3 servers; the upstream default of 3 is right.
+rancher_replicas: 3
+
+# Argo CD — minimal bootstrap. The plan calls for Argo to take over its own
+# config (app-of-apps from homelab-gitops) right after install, so this play
+# stays deliberately bare: namespace + chart, ClusterIP service, no ingress.
+# Access via `kubectl port-forward` until the gitops repo wires the real
+# ingress + RBAC.
+argocd_namespace: argocd
+argocd_release_name: argocd
+argocd_chart_repo_name: argo
+argocd_chart_repo_url: https://argoproj.github.io/argo-helm
+argocd_chart_ref: argo/argo-cd
+argocd_chart_version: "9.5.21"

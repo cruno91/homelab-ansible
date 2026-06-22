@@ -1,0 +1,23 @@
+---
+# Bootstrap-only: installs Rancher via Helm on the rke2-mgmt cluster.
+# Requires cert-manager to be present already (rke2-mgmt-certmanager.yml).
+# After Argo CD adopts homelab-gitops, Rancher version + values move into
+# Git; this play is then only re-run during a full teardown drill.
+- name: Install Rancher on rke2-mgmt
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  # See playbooks/rke2-mgmt-certmanager.yml for the rationale — bootstrap
+  # plays run on the workstation and don't need sudo, even though
+  # group_vars/all.yml turns become on for the rest of the fleet.
+  # group_vars/all.yml sets ansible_become: true, which beats a bare
+  # `become: false` keyword for the implicit localhost — so we also set
+  # the variable form here to make the override stick.
+  become: false
+  vars:
+    ansible_become: false
+  vars_files:
+    - ../inventory/group_vars/rke2-mgmt/main.yml
+    - ../inventory/group_vars/rke2-mgmt/secrets.yml
+  roles:
+    - rancher

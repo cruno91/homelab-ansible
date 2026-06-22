@@ -9,6 +9,7 @@ Current roles:
 - Manage code-server
 - Provision and tear down a K3s dev cluster on Raspberry Pis (see [docs/k3s-ops.md](docs/k3s-ops.md))
 - Provision and tear down the RKE2 management cluster on Proxmox VMs (see [docs/rke2-mgmt-ops.md](docs/rke2-mgmt-ops.md))
+- One-time bootstrap of cert-manager, Rancher, and Argo CD on the RKE2 mgmt cluster — the last manual Helm step before `homelab-gitops` takes over (see [docs/rke2-mgmt-bootstrap-ops.md](docs/rke2-mgmt-bootstrap-ops.md))
 - Share a single `kubevip` role between both clusters for the ARP-mode control-plane VIP
 - Run a one-shot post-install on fresh Proxmox VE nodes (see [docs/proxmox-ops.md](docs/proxmox-ops.md))
 - Keep roles semantic and not procedural
@@ -38,12 +39,15 @@ All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd)
 ├── docs
 │ ├── k3s-ops.md
 │ ├── proxmox-ops.md
+│ ├── rke2-mgmt-bootstrap-ops.md
 │ └── rke2-mgmt-ops.md
 ├── inventory
 │ ├── group_vars
 │ │ ├── all.yml
 │ │ ├── k3s-dev.yml
-│ │ └── rke2-mgmt.yml
+│ │ └── rke2-mgmt
+│ │     ├── main.yml
+│ │     └── secrets.yml.example
 │ ├── host_vars
 │ │ └── codeserver-pi.yml
 │ └── hosts.ini
@@ -56,14 +60,24 @@ All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd)
 │ ├── k3s-dev-uninstall.yml
 │ ├── k3s-dev-update.yml
 │ ├── portainer.yml
+│ ├── rke2-mgmt-argocd.yml
+│ ├── rke2-mgmt-bootstrap.yml
+│ ├── rke2-mgmt-certmanager.yml
 │ ├── rke2-mgmt-install.yml
 │ ├── rke2-mgmt-kubeconfig.yml
+│ ├── rke2-mgmt-rancher.yml
 │ ├── rke2-mgmt-reboot.yml
 │ ├── rke2-mgmt-remove-node.yml
 │ ├── rke2-mgmt-uninstall.yml
 │ ├── rke2-mgmt-update.yml
 │ ├── roles
+│ │ ├── argocd
+│ │ │ └── tasks
+│ │ │     └── main.yml
 │ │ ├── base
+│ │ │ └── tasks
+│ │ │     └── main.yml
+│ │ ├── certmanager
 │ │ │ └── tasks
 │ │ │     └── main.yml
 │ │ ├── codeserver
@@ -90,6 +104,9 @@ All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd)
 │ │ ├── proxmox
 │ │ │ ├── files
 │ │ │ │ └── whiptail
+│ │ │ └── tasks
+│ │ │     └── main.yml
+│ │ ├── rancher
 │ │ │ └── tasks
 │ │ │     └── main.yml
 │ │ └── rke2
@@ -162,7 +179,7 @@ All three k3s-dev nodes run as K3s servers (HA control plane with embedded etcd)
 	Proxmox hosts are never auto-rebooted by either path — see
 	[docs/proxmox-ops.md](docs/proxmox-ops.md#reboot-policy).
 
-For K3s cluster install, upgrades, node add/remove, kubeconfig fetch, snapshots, and health checks, see [docs/k3s-ops.md](docs/k3s-ops.md). The same operations for the RKE2 management cluster live in [docs/rke2-mgmt-ops.md](docs/rke2-mgmt-ops.md). For Proxmox post-install setup, reboot policy, and verification, see [docs/proxmox-ops.md](docs/proxmox-ops.md).
+For K3s cluster install, upgrades, node add/remove, kubeconfig fetch, snapshots, and health checks, see [docs/k3s-ops.md](docs/k3s-ops.md). The same operations for the RKE2 management cluster live in [docs/rke2-mgmt-ops.md](docs/rke2-mgmt-ops.md). The one-time Helm bootstrap of cert-manager / Rancher / Argo CD that runs after RKE2 is up — and before `homelab-gitops` takes over — lives in [docs/rke2-mgmt-bootstrap-ops.md](docs/rke2-mgmt-bootstrap-ops.md). For Proxmox post-install setup, reboot policy, and verification, see [docs/proxmox-ops.md](docs/proxmox-ops.md).
 
 ### Ad-hoc commands
 

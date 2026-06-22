@@ -1,0 +1,68 @@
+---
+# One-shot bootstrap of the Helm-installed components that must exist
+# before Argo CD can take over (homelab-gitops). The plan's Bootstrap Order
+# steps 5 + 8 collapsed into a single, reproducible run for the Phase 2
+# teardown drill.
+#
+# After this playbook completes:
+#   1. Point Argo CD at homelab-gitops/bootstrap (app-of-apps).
+#   2. Stop running these plays for routine config — bumps go through Git.
+#   3. Keep this playbook around only for the rebuild drill.
+#
+# See docs/rke2-mgmt-bootstrap-ops.md for prereqs, exposure, and post-install
+# steps (real TLS, Rancher hostname DNS, Argo CD ingress).
+
+- name: Preflight — verify bootstrap kubeconfig exists
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  # See playbooks/rke2-mgmt-certmanager.yml for the rationale — bootstrap
+  # plays run on the workstation and don't need sudo, even though
+  # group_vars/all.yml turns become on for the rest of the fleet.
+  # group_vars/all.yml sets ansible_become: true, which beats a bare
+  # `become: false` keyword for the implicit localhost — so we also set
+  # the variable form here to make the override stick.
+  become: false
+  vars:
+    ansible_become: false
+  vars_files:
+    - ../inventory/group_vars/rke2-mgmt/main.yml
+    - ../inventory/group_vars/rke2-mgmt/secrets.yml
+  tasks:
+    - name: Stat fetched kubeconfig
+      ansible.builtin.stat:
+        path: "{{ bootstrap_kubeconfig }}"
+      register: kubeconfig_stat
+
+    - name: Fail if kubeconfig not present
+      ansible.builtin.fail:
+        msg: |
+          {{ bootstrap_kubeconfig }} not found.
+
+          Fetch it first:
+            ansible-playbook playbooks/rke2-mgmt-kubeconfig.yml --ask-become-pass
+      when: not kubeconfig_stat.stat.exists
+
+    - name: Verify mgmt API is reachable through the VIP
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ bootstrap_kubeconfig }}"
+        kind: Node
+      register: mgmt_nodes
+      changed_when: false
+
+    - name: Fail if no nodes are returned
+      ansible.builtin.fail:
+        msg: |
+          Mgmt cluster returned zero nodes via {{ bootstrap_kubeconfig }}.
+          Check VIP {{ rke2_vip }} reachability and that rke2-server is
+          active on at least one node (see docs/rke2-mgmt-ops.md).
+      when: mgmt_nodes.resources | length == 0
+
+- name: Bootstrap cert-manager
+  ansible.builtin.import_playbook: rke2-mgmt-certmanager.yml
+
+- name: Bootstrap Rancher
+  ansible.builtin.import_playbook: rke2-mgmt-rancher.yml
+
+- name: Bootstrap Argo CD
+  ansible.builtin.import_playbook: rke2-mgmt-argocd.yml

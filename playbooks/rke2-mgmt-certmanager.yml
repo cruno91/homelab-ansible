@@ -1,0 +1,27 @@
+---
+# Bootstrap-only: installs cert-manager via Helm on the rke2-mgmt cluster.
+# Runs locally against the admin kubeconfig fetched by
+# rke2-mgmt-kubeconfig.yml. After Argo CD adopts homelab-gitops, this play
+# stops being the source of truth for cert-manager — version bumps and
+# values changes flow through Git from that point on.
+- name: Install cert-manager on rke2-mgmt
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  # group_vars/all.yml sets ansible_become: true for the fleet (so OS plays
+  # can sudo on each node). Bootstrap plays run entirely on the workstation
+  # against a fetched kubeconfig and never need sudo — opt out explicitly
+  # so they don't prompt for --ask-become-pass. The variable form is needed
+  # because `ansible_become: true` from group_vars/all.yml beats a bare
+  # `become: false` keyword for the implicit localhost host.
+  become: false
+  vars:
+    ansible_become: false
+  vars_files:
+    - ../inventory/group_vars/rke2-mgmt/main.yml
+    # cert-manager bootstrap does not consume any secret values today, but we
+    # load the same secrets file the other bootstrap plays do so a missing
+    # `secrets.yml` fails this play with the same clear error message.
+    - ../inventory/group_vars/rke2-mgmt/secrets.yml
+  roles:
+    - certmanager
