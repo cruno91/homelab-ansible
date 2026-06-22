@@ -1,12 +1,12 @@
 # Cluster identity
-k3s_cluster_name: k3s-dev
+k3s_cluster_name: k3s-edge
 
 # Control plane VIP (managed by kube-vip)
 k3s_vip: 10.0.3.20
 
 # Pin K3s release. Empty channel/version → install script default ("stable" channel).
 # Set either k3s_channel ("stable" / "latest" / "v1.31") or k3s_version ("v1.31.5+k3s1").
-# Bumping either + running playbooks/k3s-dev-update.yml performs a rolling upgrade.
+# Bumping either + running playbooks/k3s-edge-update.yml performs a rolling upgrade.
 k3s_channel: "stable"
 k3s_version: ""
 # k3s_version: "v1.34.4+k3s1"

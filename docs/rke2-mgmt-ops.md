@@ -32,7 +32,7 @@ RKE2 registers each node under its system hostname (`hostname --short`), which m
 
 ## How RKE2 differs from K3s in this repo
 
-| | K3s (`k3s-dev`) | RKE2 (`rke2-mgmt`) |
+| | K3s (`k3s-edge`) | RKE2 (`rke2-mgmt`) |
 |---|---|---|
 | Install script | `https://get.k3s.io` | `https://get.rke2.io` |
 | systemd unit | `k3s.service` | `rke2-server.service` |
@@ -118,7 +118,7 @@ ansible-playbook playbooks/rke2-mgmt-reboot.yml \
 
 Same shape as K3s: `serial: 1`, drain → reboot → wait for local RKE2 API → wait for Ready → uncordon. The OS-upgrade path (`site.yml --tags os_upgrade`) uses the same task file with `rke2_reboot_force: false`, so a node that didn't need to reboot after `apt upgrade` skips the dance entirely.
 
-The base role's simple `ansible.builtin.reboot` tasks self-skip for hosts in the `rke2-mgmt` group — the safe-reboot plays own the reboot for those nodes (parallel to `k3s-dev` and `proxmox`).
+The base role's simple `ansible.builtin.reboot` tasks self-skip for hosts in the `rke2-mgmt` group — the safe-reboot plays own the reboot for those nodes (parallel to `k3s-edge` and `proxmox`).
 
 ---
 

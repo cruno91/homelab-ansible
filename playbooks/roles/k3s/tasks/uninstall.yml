@@ -1,7 +1,7 @@
 ---
 - name: Skip primary node (handled in separate play)
   ansible.builtin.meta: end_host
-  when: k3s_skip_primary | default(false) and inventory_hostname == groups['k3s-dev'][0]
+  when: k3s_skip_primary | default(false) and inventory_hostname == groups['k3s-edge'][0]
 
 - name: Remove kube-vip manifests
   ansible.builtin.file:

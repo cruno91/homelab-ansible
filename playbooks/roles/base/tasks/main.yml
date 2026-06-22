@@ -56,7 +56,7 @@
     test_command: whoami
   when:
     - reboot_required.stat.exists
-    - "'k3s-dev' not in group_names"
+    - "'k3s-edge' not in group_names"
     - "'rke2-mgmt' not in group_names"
     - "'proxmox' not in group_names"
   become: true
@@ -70,7 +70,7 @@
     post_reboot_delay: 30
     test_command: whoami
   when:
-    - "'k3s-dev' not in group_names"
+    - "'k3s-edge' not in group_names"
     - "'rke2-mgmt' not in group_names"
     - "'proxmox' not in group_names"
   become: true

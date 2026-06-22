@@ -2,7 +2,7 @@
 # Pre-flight: gather install state from every node in parallel so the
 # bootstrap-integrity check can compare across the group.
 - name: Pre-flight checks for K3s cluster
-  hosts: k3s-dev
+  hosts: k3s-edge
   gather_facts: false
   tasks:
     - name: Check whether K3s is already installed
@@ -11,28 +11,28 @@
       register: k3s_installed
 
 - name: Validate bootstrap node integrity
-  hosts: k3s-dev
+  hosts: k3s-edge
   gather_facts: false
   run_once: true
   tasks:
     - name: Fail if bootstrap node missing K3s but other nodes have it
       ansible.builtin.fail:
         msg: |
-          Bootstrap node {{ groups['k3s-dev'][0] }} has no K3s installed,
-          but other k3s-dev nodes do. Running install would form a NEW
+          Bootstrap node {{ groups['k3s-edge'][0] }} has no K3s installed,
+          but other k3s-edge nodes do. Running install would form a NEW
           cluster on the bootstrap node and orphan the existing one.
 
           Recovery options:
-            - Restore {{ groups['k3s-dev'][0] }} from an etcd snapshot
+            - Restore {{ groups['k3s-edge'][0] }} from an etcd snapshot
               (see README "Restoring etcd from a snapshot"), or
-            - Tear the cluster down (playbooks/k3s-dev-uninstall.yml) and
+            - Tear the cluster down (playbooks/k3s-edge-uninstall.yml) and
               reinstall fresh.
       when:
-        - not hostvars[groups['k3s-dev'][0]].k3s_installed.stat.exists
-        - groups['k3s-dev'][1:] | map('extract', hostvars) | map(attribute='k3s_installed.stat.exists') | select | list | length > 0
+        - not hostvars[groups['k3s-edge'][0]].k3s_installed.stat.exists
+        - groups['k3s-edge'][1:] | map('extract', hostvars) | map(attribute='k3s_installed.stat.exists') | select | list | length > 0
 
 - name: Install K3s cluster
-  hosts: k3s-dev
+  hosts: k3s-edge
   gather_facts: true
   serial: 1
   any_errors_fatal: true

@@ -1,6 +1,6 @@
 ---
 - name: Baseline management for non-K3s RPis
-  hosts: rpis:!k3s-dev
+  hosts: rpis:!k3s-edge
   gather_facts: true
   roles:
     - base
@@ -27,10 +27,10 @@
   tags: [never, proxmox_post_install]
 
 # K3s nodes apply baseline one at a time so the cluster is never broadly
-# disturbed. The base role's reboot tasks self-skip for k3s-dev hosts; the
+# disturbed. The base role's reboot tasks self-skip for k3s-edge hosts; the
 # safe-reboot plays below own the reboot, drain, and re-Ready dance.
 - name: Baseline management for K3s dev cluster
-  hosts: k3s-dev
+  hosts: k3s-edge
   gather_facts: true
   serial: 1
   any_errors_fatal: true
@@ -41,7 +41,7 @@
 # /var/run/reboot-required exists; the safe-reboot task file checks that
 # and end_hosts itself when there is no work to do.
 - name: Safe rolling reboot for K3s dev cluster (if required after OS upgrade)
-  hosts: k3s-dev
+  hosts: k3s-edge
   gather_facts: true
   serial: 1
   any_errors_fatal: true
@@ -55,7 +55,7 @@
 # Triggered only by --tags manual_reboot. Always reboots, drained one at
 # a time so etcd quorum (2-of-3) is preserved.
 - name: Safe rolling manual reboot for K3s dev cluster
-  hosts: k3s-dev
+  hosts: k3s-edge
   gather_facts: true
   serial: 1
   any_errors_fatal: true

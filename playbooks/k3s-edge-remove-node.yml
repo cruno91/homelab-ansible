@@ -1,6 +1,6 @@
 ---
 # Remove a single non-bootstrap node from the K3s cluster.
-# Usage: --extra-vars "target_node=<inventory hostname in [k3s-dev]>"
+# Usage: --extra-vars "target_node=<inventory hostname in [k3s-edge]>"
 - name: Validate node removal request
   hosts: localhost
   gather_facts: false
@@ -9,11 +9,11 @@
       ansible.builtin.assert:
         that:
           - target_node is defined
-          - target_node in groups['k3s-dev']
-          - target_node != groups['k3s-dev'][0]
+          - target_node in groups['k3s-edge']
+          - target_node != groups['k3s-edge'][0]
         fail_msg: |
           Pass --extra-vars "target_node=<hostname>" naming a non-bootstrap
-          node in the [k3s-dev] group. The bootstrap node ({{ groups['k3s-dev'][0] }})
+          node in the [k3s-edge] group. The bootstrap node ({{ groups['k3s-edge'][0] }})
           cannot be removed via this playbook because the install playbook
           treats it as the cluster's source of truth. To replace the bootstrap
           node, restore from an etcd snapshot instead.
@@ -26,7 +26,7 @@
   tasks: []
 
 - name: Drain and delete target node from cluster
-  hosts: "{{ groups['k3s-dev'] | reject('equalto', target_node) | list | first }}"  # noqa: syntax-check[specific]
+  hosts: "{{ groups['k3s-edge'] | reject('equalto', target_node) | list | first }}"  # noqa: syntax-check[specific]
   gather_facts: false
   vars:
     k3s_node_name: "{{ hostvars[target_node].ansible_hostname }}"

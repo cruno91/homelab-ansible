@@ -3,7 +3,7 @@
 # drain → reboot → wait for k3s API → wait for Ready → uncordon.
 # Use --limit to reboot a subset; otherwise all three nodes are rebooted.
 - name: Rolling reboot of K3s cluster
-  hosts: k3s-dev
+  hosts: k3s-edge
   gather_facts: true
   serial: 1
   any_errors_fatal: true
