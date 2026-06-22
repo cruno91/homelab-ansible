@@ -160,7 +160,7 @@ export KUBECONFIG=$(pwd)/kubeconfig-k3s-edge.yaml
 kubectl get nodes
 ```
 
-The playbook slurps `/etc/rancher/k3s/k3s.yaml` from the bootstrap node, rewrites the server URL from `127.0.0.1` to the VIP `10.0.3.20`, and writes it to `kubeconfig-k3s-edge.yaml` at the repo root. The VIP-rewritten URL means `kubectl` survives any single server going down.
+The playbook slurps `/etc/rancher/k3s/k3s.yaml` from the bootstrap node, rewrites the server URL from `127.0.0.1` to the VIP `10.0.3.20`, renames the cluster/context/user from K3s's hardcoded `default` to `k3s_cluster_name` (`k3s-edge`), and writes it to `kubeconfig-k3s-edge.yaml` at the repo root. The VIP-rewritten URL means `kubectl` survives any single server going down; the renamed context means the file is self-describing and merge-safe.
 
 `export` only affects the current shell. Persist it in your shell rc if you want.
 
