@@ -130,7 +130,7 @@ export KUBECONFIG=$(pwd)/kubeconfig-rke2-mgmt.yaml
 kubectl get nodes
 ```
 
-Slurps `/etc/rancher/rke2/rke2.yaml` from the bootstrap node, rewrites the server URL from `127.0.0.1` to the VIP (`10.0.3.40`), and writes to `kubeconfig-rke2-mgmt.yaml` at the repo root. The VIP-rewritten URL means `kubectl` survives any single server going down.
+Slurps `/etc/rancher/rke2/rke2.yaml` from the bootstrap node, rewrites the server URL from `127.0.0.1` to the VIP (`10.0.3.40`), renames the cluster/context/user from RKE2's hardcoded `default` to `rke2_cluster_name` (`rke2-mgmt`), and writes to `kubeconfig-rke2-mgmt.yaml` at the repo root. The VIP-rewritten URL means `kubectl` survives any single server going down; the renamed context means the file is self-describing and merge-safe.
 
 ---
 
