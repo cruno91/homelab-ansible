@@ -21,6 +21,12 @@
       write-kubeconfig-mode: "644"
       tls-san:
         - "{{ k3s_vip }}"
+      {% if k3s_disable | default([]) | length > 0 %}
+      disable:
+      {% for component in k3s_disable %}
+        - {{ component }}
+      {% endfor %}
+      {% endif %}
       etcd-snapshot-schedule-cron: "{{ k3s_etcd_snapshot_cron }}"
       etcd-snapshot-retention: {{ k3s_etcd_snapshot_retention }}
       etcd-snapshot-dir: "{{ k3s_etcd_snapshot_dir }}"
