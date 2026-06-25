@@ -19,6 +19,7 @@ All commands assume you are at the repo root (`rpi-ansible/`) on your workstatio
 | etcd snapshot location | `/var/lib/rancher/k3s/server/db/snapshots/` on each server |
 | etcd snapshot schedule | Every 6 hours (`0 */6 * * *`), retain 10 |
 | Kubeconfig destination | `kubeconfig-k3s-edge.yaml` at repo root (gitignored — contains admin cert) |
+| Bundled components disabled | `traefik` (see [Default install opinions](#default-install-opinions)) |
 
 ### Inventory hostname vs. K3s node name
 
@@ -86,6 +87,49 @@ When the day-2 ops branch (or any future change to `config.yaml` keys, kube-vip 
 4. **Run the full health check below.**
 
 kube-vip is staged into `/var/lib/rancher/k3s/server/manifests/` on the bootstrap node and **auto-applied** by K3s — no restart needed for that piece. The DaemonSet reconciles cluster-wide on its own.
+
+---
+
+## Default install opinions
+
+K3s ships several optional components on by default. We turn some off via
+`k3s_disable` in `inventory/group_vars/k3s-edge.yml`; the list is rendered
+into `/etc/rancher/k3s/config.yaml` as a `disable:` block on every node.
+
+### Why Traefik is disabled
+
+K3s installs Traefik as its default ingress controller. Traefik exposes itself
+through K3s's bundled service load balancer (`servicelb` / `klipper-lb`), whose
+svclb DaemonSet binds **hostPort 80 and 443 on every node**.
+
+Ingress on this cluster is owned by **Envoy Gateway** (managed declaratively
+from `homelab-gitops` via Argo CD, see `platform/envoy-gateway/`). Envoy's
+data plane is also a DaemonSet behind a `Service type: LoadBalancer`, which
+needs hostPort 443 to be free for klipper-lb to allocate it an EXTERNAL-IP.
+If Traefik is present, its svclb claims 443 first and Envoy's svclb pods sit
+Pending forever — the `Gateway` resource never gets `Programmed=True` and no
+HTTPS traffic flows.
+
+Disabling Traefik at install time makes this conflict impossible on a
+from-scratch rebuild. It also removes one unused workload from every node.
+
+We keep `servicelb` enabled — that's klipper-lb, which is exactly what
+Envoy's LoadBalancer Service needs to get the node IPs as EXTERNAL-IPs
+without needing `hostNetwork` mode on the Envoy pods.
+
+### Applying a change to `k3s_disable` on an existing cluster
+
+Adding or removing a component in `k3s_disable` is a `config.yaml` change —
+follow the standard day-2 flow from [Applying day-2 ops changes to an
+existing cluster](#applying-day-2-ops-changes-to-an-existing-cluster):
+
+1. Re-run `k3s-edge-install.yml` to stage the new `config.yaml`.
+2. Either run `k3s-edge-update.yml` for a rolling restart that picks up the
+   change cleanly, or — if you want to evict a disabled component
+   immediately without a restart — `kubectl -n kube-system delete helmchart
+   <name>` triggers the embedded HelmChart controller to uninstall it
+   right now. (K3s's auto-deploy manifests on disk are not re-applied as
+   long as `disable:` keeps the component listed.)
 
 ---
 
@@ -349,7 +393,7 @@ export KUBECONFIG=$(pwd)/kubeconfig-k3s-edge.yaml
 | All nodes Ready | `kubectl get nodes` | 3 nodes, all `Ready`, role column shows `control-plane,etcd` |
 | Versions consistent | `kubectl get nodes -o wide` | `VERSION` column matches across all 3 nodes |
 | Nothing cordoned | `kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.unschedulable}{"\n"}{end}'` | Each node prints empty / `<no value>` |
-| Control plane pods | `kubectl -n kube-system get pods` | `coredns`, `local-path-provisioner`, `metrics-server`, `traefik`, `kube-vip-ds-*` all `Running` (`helm-install-*` `Completed` is normal) |
+| Control plane pods | `kubectl -n kube-system get pods` | `coredns`, `local-path-provisioner`, `metrics-server`, `kube-vip-ds-*` all `Running` (`helm-install-*` `Completed` is normal). No `traefik` — disabled via `k3s_disable`. |
 | kube-vip claimed VIP | `ansible -i inventory/hosts.ini k3s-edge -a "ip -4 addr show eth0" --become \| grep -E "10\\.0\\.3\\.20\|CHANGED"` | Exactly one node lists `10.0.3.20/32` on `eth0` (the `deprecated` flag is normal) |
 | API reachable via VIP (auth'd) | `kubectl --server=https://10.0.3.20:6443 get --raw=/healthz` | `ok` |
 | API reachable via VIP (unauth'd) | `ansible -i inventory/hosts.ini 'k3s-edge[0]' -a "curl -sk https://10.0.3.20:6443/healthz" --become` | `Unauthorized` 401 — passes because TLS + routing worked |

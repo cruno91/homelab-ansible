@@ -14,6 +14,24 @@ k3s_version: ""
 # K3s server flags. --cluster-init is only honored on the first server bootstrap.
 k3s_server_exec: "server --cluster-init"
 
+# K3s bundled components to opt out of at install time.
+#
+# Traefik: K3s installs Traefik by default and its svclb DaemonSet binds
+# hostPort 443 on every node. Ingress on this cluster is owned by Envoy
+# Gateway (managed from homelab-gitops via Argo CD); when Envoy's data plane
+# Service tries to claim 443 through the same klipper-lb mechanism, the
+# Traefik svclb wins because it's already there, and Envoy's svclb pods
+# stay Pending forever. Disabling Traefik at install time eliminates the
+# conflict on a from-scratch build and means there is one fewer ingress
+# controller running for nothing. See homelab-gitops/docs/setup-log.md
+# (Week 10 course-correction) for the full story.
+#
+# Do NOT add `servicelb` here — that is klipper-lb, which IS the mechanism
+# Envoy's LoadBalancer Service uses to get an EXTERNAL-IP without
+# hostNetwork on this CNI.
+k3s_disable:
+  - traefik
+
 # Embedded-etcd snapshot management (server-side, in-tree).
 k3s_etcd_snapshot_cron: "0 */6 * * *"
 k3s_etcd_snapshot_retention: 10
