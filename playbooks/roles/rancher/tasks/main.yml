@@ -5,10 +5,21 @@
 # run first — Rancher's pre-install hook checks for the cert-manager
 # webhook and refuses to start without it.
 #
-# This install uses Rancher's self-signed CA (ingress.tls.source=rancher).
-# When the Cloudflare DNS-01 ClusterIssuer is wired up later (via
-# homelab-gitops), the gitops values flip to ingress.tls.source=secret and
-# point at a cert-manager-issued wildcard.
+# TLS: ingress.tls.source=secret (ADR-0009 W1 Phase 4, 2026-09-09). The chart
+# HARDCODES the ingress secret name `tls-rancher-ingress` for source=secret. That
+# secret is owned by the chart's own self-signed Certificate until THIS upgrade
+# removes the Certificate/Issuer and orphans it; only then may the LE Certificate in
+# homelab-gitops `apps/mgmt-tls/cert-rancher.yaml` be merged to overwrite it.
+# Run this play FIRST, then merge that cert. Do not invert the order.
+#
+# agentTLSMode: system-store makes downstream cattle-cluster-agents verify the
+# Rancher endpoint against the public trust chain instead of the CATTLE_CA_CHECKSUM
+# pin — the trust-model fragility behind the 2026-07-10 agent-disconnect incident.
+#
+# NOTE: `additionalTrustedCAs: true` is present on the LIVE release (added by a manual
+# helm upgrade, revision 4/5 Jun 2026) but has never been set by this role. Helm
+# replaces user-supplied values wholesale, so running this play drops it — which is
+# the intended ADR-0003 cleanup. Nothing to delete here; do not re-add it.
 #
 # Helm 4 + rancher chart hook workaround
 # ---------------------------------------
@@ -42,7 +53,8 @@
       hostname: "{{ rancher_hostname }}"
       replicas: "{{ rancher_replicas }}"
       bootstrapPassword: "{{ rancher_bootstrap_password }}"
+      agentTLSMode: system-store
       ingress:
         tls:
-          source: rancher
+          source: secret
   no_log: true
