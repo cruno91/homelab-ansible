@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  # Weekly, so chart-pin drift against homelab-gitops surfaces even in weeks
+  # when nobody opens a PR against this repo. See the version-sync job.
+  schedule:
+    - cron: "17 6 * * 1"
 
 jobs:
   lint:
@@ -98,3 +102,29 @@ jobs:
               --extra-vars "target_node=k3s-edge-node-3"
             echo "::endgroup::"
           done
+
+  version-sync:
+    name: Bootstrap chart pins match homelab-gitops
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      # These charts are installed once by Ansible on day 0 and owned by Argo CD
+      # from day 1 (ADR-0004), so the version is pinned in BOTH repos. If they
+      # drift, a from-scratch rebuild installs one version and Argo immediately
+      # converts it to the other -- a silent flap during the very drill that is
+      # supposed to prove the rebuild works. homelab-gitops is the source of
+      # truth; this job fails if the pins here disagree with it.
+      #
+      # Read-only and unauthenticated: both repos are public, so no token is
+      # needed and nothing here can write to the other repo.
+      - name: Compare cert-manager + argo-cd pins against homelab-gitops
+        run: python .github/scripts/check-chart-pins.py
