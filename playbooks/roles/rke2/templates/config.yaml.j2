@@ -5,6 +5,18 @@
 write-kubeconfig-mode: "0644"
 tls-san:
   - "{{ rke2_vip }}"
+{% if rke2_disable | default([]) | length > 0 %}
+{# Packaged components RKE2 should not deploy. Per RKE2's server config docs this
+   both skips deployment AND deletes any already-deployed component, so adding an
+   entry here and restarting rke2-server removes it from a running cluster.
+   Mirrors `k3s_disable` on the edge cluster. Applied to a live cluster via
+   playbooks/rke2-mgmt-reconfigure.yml (config.yaml is otherwise only written at
+   install time). #}
+disable:
+{% for component in rke2_disable %}
+  - {{ component }}
+{% endfor %}
+{% endif %}
 etcd-snapshot-schedule-cron: "{{ rke2_etcd_snapshot_cron }}"
 etcd-snapshot-retention: {{ rke2_etcd_snapshot_retention }}
 etcd-snapshot-dir: "{{ rke2_etcd_snapshot_dir }}"

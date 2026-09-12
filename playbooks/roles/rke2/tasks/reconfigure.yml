@@ -1,0 +1,116 @@
+---
+# Apply a changed config.yaml to ONE already-running RKE2 server, safely.
+# Caller play must use serial: 1 (playbooks/rke2-mgmt-reconfigure.yml does).
+#
+# Why this exists: config.yaml is otherwise written only by install.yml, and
+# update.yml only *activates* changes someone else staged (see its comment).
+# So before this task file there was no supported way to change cluster config
+# on a live cluster — found while writing the W2 blast-radius runbook.
+#
+# Same drain -> change -> restart -> wait -> uncordon shape as update.yml, minus
+# the install-script download/run: this changes configuration only, never the
+# RKE2 version. Use rke2-mgmt-update.yml when you want a version change.
+- name: Determine helper node for drain/uncordon
+  ansible.builtin.set_fact:
+    rke2_helper_node: "{{ (groups['rke2-mgmt'] | reject('equalto', inventory_hostname) | list)[0] | default('') }}"
+
+- name: Fail if no helper node is available
+  ansible.builtin.fail:
+    msg: "Rolling reconfigure requires at least 2 nodes in the [rke2-mgmt] group."
+  when: rke2_helper_node == ''
+
+- name: Wait for helper API to serve requests
+  ansible.builtin.command: "{{ rke2_bin_dir }}/kubectl get --raw=/readyz"
+  environment:
+    KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
+  delegate_to: "{{ rke2_helper_node }}"
+  become: true
+  register: rke2_helper_readyz
+  retries: 30
+  delay: 10
+  until: rke2_helper_readyz.rc == 0
+  changed_when: false
+
+- name: Drain {{ ansible_hostname }}
+  ansible.builtin.command: >-
+    {{ rke2_bin_dir }}/kubectl drain {{ ansible_hostname }}
+      --ignore-daemonsets
+      --delete-emptydir-data
+      --force
+      --timeout=300s
+  environment:
+    KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
+  delegate_to: "{{ rke2_helper_node }}"
+  become: true
+  register: rke2_drain
+  retries: 5
+  delay: 10
+  until: rke2_drain.rc == 0
+  changed_when: true
+
+# The join stanza in config.yaml.j2 needs the cluster token for every node that
+# is not the bootstrap host. On a running cluster the token already exists on
+# disk, so read it back rather than requiring the caller to supply it.
+- name: Read existing cluster token from the bootstrap node
+  ansible.builtin.slurp:
+    src: /var/lib/rancher/rke2/server/node-token
+  delegate_to: "{{ groups['rke2-mgmt'][0] }}"
+  become: true
+  register: rke2_existing_token
+  when: inventory_hostname != groups['rke2-mgmt'][0]
+
+- name: Render updated config.yaml
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ rke2_config_dir }}/config.yaml"
+    mode: "0600"
+  vars:
+    rke2_cluster_token: >-
+      {{ (rke2_existing_token.content | b64decode | trim)
+         if inventory_hostname != groups['rke2-mgmt'][0] else '' }}
+  become: true
+  register: rke2_config_render
+
+- name: Restart rke2-server to activate the new config
+  ansible.builtin.systemd:
+    name: rke2-server
+    state: restarted
+    daemon_reload: true
+  become: true
+
+- name: Wait for local RKE2 API port to open
+  ansible.builtin.wait_for:
+    port: 6443
+    host: "{{ ansible_facts['default_ipv4']['address'] }}"
+    timeout: 600
+
+- name: Wait for local RKE2 API to serve requests
+  ansible.builtin.command: "{{ rke2_bin_dir }}/kubectl get --raw=/readyz"
+  environment:
+    KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
+  become: true
+  register: rke2_local_readyz
+  retries: 30
+  delay: 10
+  until: rke2_local_readyz.rc == 0
+  changed_when: false
+
+- name: Wait for node to report Ready
+  ansible.builtin.command: >-
+    {{ rke2_bin_dir }}/kubectl wait
+      --for=condition=Ready
+      node/{{ ansible_hostname }}
+      --timeout=300s
+  environment:
+    KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
+  delegate_to: "{{ rke2_helper_node }}"
+  become: true
+  changed_when: false
+
+- name: Uncordon {{ ansible_hostname }}
+  ansible.builtin.command: "{{ rke2_bin_dir }}/kubectl uncordon {{ ansible_hostname }}"
+  environment:
+    KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
+  delegate_to: "{{ rke2_helper_node }}"
+  become: true
+  changed_when: true

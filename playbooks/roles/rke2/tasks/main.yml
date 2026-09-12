@@ -11,6 +11,10 @@
   ansible.builtin.include_tasks: update.yml
   when: rke2_action == "update"
 
+- name: Include RKE2 rolling-reconfigure tasks
+  ansible.builtin.include_tasks: reconfigure.yml
+  when: rke2_action == "reconfigure"
+
 - name: Include RKE2 safe-reboot tasks
   ansible.builtin.include_tasks: safe-reboot.yml
   when: rke2_action == "safe_reboot"

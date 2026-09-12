@@ -1,0 +1,22 @@
+---
+# Rolling application of a changed config.yaml across the RKE2 mgmt servers.
+#
+# Use this when cluster CONFIGURATION changes but the RKE2 version does not —
+# e.g. adding a packaged component to `rke2_disable`. For version changes use
+# playbooks/rke2-mgmt-update.yml instead.
+#
+# serial: 1 with a readiness gate between nodes: restarting all three servers
+# at once would drop the mgmt control plane (and with it Rancher and Argo CD).
+#
+# First use: plan v2 W2, disabling rke2-ingress-nginx so Traefik can bind
+# hostPorts 80/443. See docs/runbooks/mgmt-httproute-migration.md in
+# homelab-gitops for ordering and rollback.
+- name: Rolling reconfigure of RKE2 mgmt cluster
+  hosts: rke2-mgmt
+  gather_facts: true
+  serial: 1
+  any_errors_fatal: true
+  vars:
+    rke2_action: reconfigure
+  roles:
+    - rke2

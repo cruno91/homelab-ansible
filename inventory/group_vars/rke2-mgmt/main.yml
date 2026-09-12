@@ -14,6 +14,18 @@ rke2_version: ""
 # rke2_version: "v1.34.4+rke2r1"
 
 # Embedded-etcd snapshot management (server-side, in-tree).
+# Packaged components RKE2 must not deploy. Adding an entry here and running
+# playbooks/rke2-mgmt-reconfigure.yml both stops deployment AND deletes the
+# already-deployed component (RKE2 server-config semantics), so this is how a
+# bundled component is removed from a live cluster.
+#
+# EMPTY TODAY ON PURPOSE. Plan v2 W2 adds `rke2-ingress-nginx` here, but only
+# inside the cutover window — Traefik must already be merged and waiting on the
+# hostPort conflict, or the mgmt control planes are simply unreachable with
+# nothing to serve them. See homelab-gitops
+# docs/runbooks/mgmt-httproute-migration.md.
+rke2_disable: []
+
 rke2_etcd_snapshot_cron: "0 */6 * * *"
 rke2_etcd_snapshot_retention: 10
 rke2_etcd_snapshot_dir: /var/lib/rancher/rke2/server/db/snapshots
@@ -91,6 +103,23 @@ rancher_chart_version: "2.14.2"
 # deliberately no public A record. Downstream cluster nodes must resolve this name
 # or their cattle-cluster-agents cannot reconnect after the cutover.
 rancher_hostname: rancher.mgmt.wretchedhive.io
+# How Rancher is exposed. These three defaults match the chart defaults and the
+# currently-deployed release, so they are a no-op today.
+#
+# plan v2 W2 (mgmt HTTPRoute migration) flips them inside the cutover window:
+#   rancher_network_exposure: none        (chart emits no Ingress and no Gateway)
+#   rancher_tls_mode: external            (Traefik terminates TLS; Rancher serves HTTP)
+# `rancher_ingress_tls_source` then becomes irrelevant but is harmless.
+#
+# Verified against chart 2.14.2 by rendering all three modes:
+#   type=ingress -> Ingress/rancher            (today)
+#   type=gateway -> Gateway/rancher-gateway + HTTPRoute/rancher  (chart's OWN gateway —
+#                   NOT what W2 wants; we attach to the shared `yavin` Gateway instead)
+#   type=none    -> no exposure resources at all  (what W2 uses)
+rancher_network_exposure: ingress
+rancher_tls_mode: ingress
+rancher_ingress_tls_source: secret
+
 # Replicas. RKE2 has 3 servers; the upstream default of 3 is right.
 rancher_replicas: 3
 

@@ -54,7 +54,22 @@
       replicas: "{{ rancher_replicas }}"
       bootstrapPassword: "{{ rancher_bootstrap_password }}"
       agentTLSMode: system-store
+      # Exposure model. Defaults below reproduce today's behaviour exactly
+      # (chart defaults are networkExposure.type=ingress and tls=ingress), so
+      # this plumbing is a no-op until the vars are flipped.
+      #
+      # plan v2 W2 flips these INSIDE the cutover window to:
+      #   rancher_network_exposure: none      <- chart creates no Ingress/Gateway
+      #   rancher_tls_mode: external          <- Traefik terminates TLS, Rancher serves HTTP
+      # with the HTTPRoute owned by homelab-gitops apps/mgmt-control-plane/ and
+      # attached to the shared `yavin` Gateway in the traefik namespace.
+      #
+      # DO NOT flip these before Traefik is serving on mgmt: with no Ingress and
+      # no HTTPRoute, Rancher becomes unreachable and downstream agents drop.
+      tls: "{{ rancher_tls_mode }}"
+      networkExposure:
+        type: "{{ rancher_network_exposure }}"
       ingress:
         tls:
-          source: secret
+          source: "{{ rancher_ingress_tls_source }}"
   no_log: true
