@@ -24,7 +24,17 @@ rke2_version: ""
 # hostPort conflict, or the mgmt control planes are simply unreachable with
 # nothing to serve them. See homelab-gitops
 # docs/runbooks/mgmt-httproute-migration.md.
-rke2_disable: []
+# CUTOVER VALUE (plan v2 W2, set 2026-09-12). Empty on main; populated only on
+# the cutover branch. Applying this via playbooks/rke2-mgmt-reconfigure.yml
+# DELETES the deployed rke2-ingress-nginx (RKE2 `disable` semantics), freeing
+# hostPorts 80/443 for Traefik.
+#
+# ORDER MATTERS: the gitops branch must already be merged and the mgmt wildcard
+# Certificate READY in ns `traefik` before this runs, or the control planes have
+# nothing serving them. See homelab-gitops
+# docs/runbooks/mgmt-httproute-migration.md, step 3.
+rke2_disable:
+  - rke2-ingress-nginx
 
 rke2_etcd_snapshot_cron: "0 */6 * * *"
 rke2_etcd_snapshot_retention: 10
@@ -116,8 +126,18 @@ rancher_hostname: rancher.mgmt.wretchedhive.io
 #   type=gateway -> Gateway/rancher-gateway + HTTPRoute/rancher  (chart's OWN gateway —
 #                   NOT what W2 wants; we attach to the shared `yavin` Gateway instead)
 #   type=none    -> no exposure resources at all  (what W2 uses)
-rancher_network_exposure: ingress
-rancher_tls_mode: ingress
+# CUTOVER VALUES (plan v2 W2, set 2026-09-12):
+#   none     -> chart emits no Ingress and no Gateway; exposure is the HTTPRoute
+#               in homelab-gitops apps/mgmt-control-plane/httproute-rancher.yaml
+#   external -> Traefik terminates TLS at the `yavin` Gateway using the
+#               *.mgmt.wretchedhive.io wildcard; Rancher serves plain HTTP
+#
+# Run playbooks/rke2-mgmt-rancher.yml with these ONLY AFTER Traefik is serving
+# and the Gateway reports PROGRAMMED=True (step 4). Running earlier removes
+# Rancher's Ingress with nothing to replace it — the UI and every downstream
+# cattle-cluster-agent lose their endpoint.
+rancher_network_exposure: none
+rancher_tls_mode: external
 rancher_ingress_tls_source: secret
 
 # Replicas. RKE2 has 3 servers; the upstream default of 3 is right.
