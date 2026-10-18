@@ -10,8 +10,9 @@ rke2_vip: 10.0.3.40
 # ("v1.31.5+rke2r1"). Bumping either + running playbooks/rke2-mgmt-update.yml
 # performs a rolling upgrade.
 rke2_channel: "stable"
-rke2_version: ""
-# rke2_version: "v1.34.4+rke2r1"
+# Pinned 2026-10-18 at the version actually running. An empty value meant "whatever
+# the stable channel served on install day", so a rebuild was not reproducible.
+rke2_version: "v1.35.5+rke2r2"
 
 # Embedded-etcd snapshot management (server-side, in-tree).
 # Packaged components RKE2 must not deploy. Adding an entry here and running
