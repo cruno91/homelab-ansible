@@ -1,0 +1,34 @@
+---
+# Re-stage the kube-vip manifest at the pinned `kubevip_version`.
+#
+# kube-vip is only staged by the *install* plays, onto the first server node of
+# each cluster (roles/rke2/tasks/install.yml, roles/k3s/tasks/install.yml), so
+# without this play there is no way to upgrade it in place. The distro's deploy
+# controller watches the server-manifests dir and rolls the DaemonSet when the
+# file changes. The VIP moves to a new leader during the roll: expect a few
+# seconds without an answer on 6443.
+#
+# Run one cluster at a time:
+#   ansible-playbook playbooks/kubevip-update.yml --limit k3s-edge --ask-become-pass
+#   ansible-playbook playbooks/kubevip-update.yml --limit rke2-mgmt --ask-become-pass
+- name: Update kube-vip on k3s-edge
+  hosts: k3s-edge[0]
+  gather_facts: false
+  tasks:
+    - name: Stage kube-vip manifests
+      ansible.builtin.include_role:
+        name: kubevip
+      vars:
+        kubevip_manifests_dir: "{{ k3s_manifests_dir }}"
+        kubevip_vip_address: "{{ k3s_vip }}"
+
+- name: Update kube-vip on rke2-mgmt
+  hosts: rke2-mgmt[0]
+  gather_facts: false
+  tasks:
+    - name: Stage kube-vip manifests
+      ansible.builtin.include_role:
+        name: kubevip
+      vars:
+        kubevip_manifests_dir: "{{ rke2_manifests_dir }}"
+        kubevip_vip_address: "{{ rke2_vip }}"

@@ -8,8 +8,9 @@ k3s_vip: 10.0.3.20
 # Set either k3s_channel ("stable" / "latest" / "v1.31") or k3s_version ("v1.31.5+k3s1").
 # Bumping either + running playbooks/k3s-edge-update.yml performs a rolling upgrade.
 k3s_channel: "stable"
-k3s_version: ""
-# k3s_version: "v1.34.4+k3s1"
+# Pinned 2026-10-18 at the version actually running. An empty value meant "whatever
+# the stable channel served on install day", so a rebuild was not reproducible.
+k3s_version: "v1.35.5+k3s1"
 
 # K3s server flags. --cluster-init is only honored on the first server bootstrap.
 k3s_server_exec: "server --cluster-init"
