@@ -1,0 +1,78 @@
+---
+# Gate: a rebooted or upgraded server is not "back" until its control plane AND
+# the whole etcd cluster are healthy, continuously, for a settle window.
+#
+# Why: node `Ready` comes from the kubelet and says nothing about the node's etcd
+# member. On 2026-10-18 rke2-server-1 reported Ready while etcd-rke2-server-1 was
+# still crash-looping; the play immediately drained + rebooted rke2-server-2, which
+# left 1 of 3 etcd members healthy -> no quorum -> mgmt API, Rancher and Argo CD
+# down for ~2 minutes. Include this after "Wait for node to report Ready" and before
+# the uncordon, so the next serial host never starts against an unsettled cluster.
+#
+# Delegated to the helper node because this node's own API may be the one still
+# settling.
+
+- name: Wait for {{ ansible_hostname }} control-plane static pods to be Ready
+  ansible.builtin.command: >-
+    {{ rke2_bin_dir }}/kubectl -n kube-system wait --for=condition=Ready
+    pod/etcd-{{ ansible_hostname }}
+    pod/kube-apiserver-{{ ansible_hostname }}
+    pod/kube-controller-manager-{{ ansible_hostname }}
+    pod/kube-scheduler-{{ ansible_hostname }}
+    --timeout=600s
+  environment:
+    KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
+  delegate_to: "{{ rke2_helper_node }}"
+  become: true
+  changed_when: false
+
+- name: Wait for every etcd member to report healthy
+  ansible.builtin.command: >-
+    {{ rke2_bin_dir }}/kubectl -n kube-system exec etcd-{{ ansible_hostname }} --
+    etcdctl
+    --cacert=/var/lib/rancher/rke2/server/tls/etcd/server-ca.crt
+    --cert=/var/lib/rancher/rke2/server/tls/etcd/server-client.crt
+    --key=/var/lib/rancher/rke2/server/tls/etcd/server-client.key
+    endpoint health --cluster
+  environment:
+    KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
+  delegate_to: "{{ rke2_helper_node }}"
+  become: true
+  register: rke2_etcd_health
+  until: rke2_etcd_health.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
+
+- name: Settle - control plane must stay healthy for {{ rke2_settle_seconds }}s
+  ansible.builtin.shell: |
+    set -euo pipefail
+    export KUBECONFIG={{ rke2_kubeconfig_remote }}
+    K={{ rke2_bin_dir }}/kubectl
+    N={{ ansible_hostname }}
+    restarts() { $K -n kube-system get pod "etcd-$N" -o jsonpath='{.status.containerStatuses[0].restartCount}'; }
+    start_restarts=$(restarts)
+    end=$(( $(date +%s) + {{ rke2_settle_seconds }} ))
+    while [ "$(date +%s)" -lt "$end" ]; do
+      [ "$($K get node "$N" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')" = "True" ] \
+        || { echo "node $N left Ready during settle"; exit 1; }
+      $K -n kube-system exec "etcd-$N" -- etcdctl \
+        --cacert=/var/lib/rancher/rke2/server/tls/etcd/server-ca.crt \
+        --cert=/var/lib/rancher/rke2/server/tls/etcd/server-client.crt \
+        --key=/var/lib/rancher/rke2/server/tls/etcd/server-client.key \
+        endpoint health --cluster >/dev/null \
+        || { echo "etcd cluster unhealthy during settle"; exit 1; }
+      [ "$(restarts)" = "$start_restarts" ] \
+        || { echo "etcd-$N restarted during settle"; exit 1; }
+      sleep 10
+    done
+    echo "control plane on $N settled for {{ rke2_settle_seconds }}s"
+  args:
+    executable: /bin/bash
+  delegate_to: "{{ rke2_helper_node }}"
+  become: true
+  register: rke2_settle
+  until: rke2_settle.rc == 0
+  retries: 5
+  delay: 15
+  changed_when: false

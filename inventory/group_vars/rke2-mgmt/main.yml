@@ -14,6 +14,11 @@ rke2_channel: "stable"
 # the stable channel served on install day", so a rebuild was not reproducible.
 rke2_version: "v1.35.5+rke2r2"
 
+# Seconds the control plane + every etcd member must stay continuously healthy after
+# a node returns from reboot/upgrade, before the serial play uncordons it and moves on
+# (roles/rke2/tasks/control-plane-settled.yml). Added after the 2026-10-18 quorum loss.
+rke2_settle_seconds: 90
+
 # Embedded-etcd snapshot management (server-side, in-tree).
 # Packaged components RKE2 must not deploy. Adding an entry here and running
 # playbooks/rke2-mgmt-reconfigure.yml both stops deployment AND deletes the
