@@ -95,6 +95,9 @@
   become: true
   changed_when: false
 
+- name: Gate on control plane + etcd cluster health before uncordon
+  ansible.builtin.include_tasks: control-plane-settled.yml
+
 - name: Uncordon {{ ansible_hostname }}
   ansible.builtin.command: "{{ rke2_bin_dir }}/kubectl uncordon {{ ansible_hostname }}"
   environment:
