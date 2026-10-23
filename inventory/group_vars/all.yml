@@ -7,3 +7,7 @@ ansible_become_method: sudo
 # Use --ask-become-pass for sudo passwords.
 # Add for SSH key handling.
 ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new"
+
+# Pinned 2026-10-18 (was :latest, so every run silently took whatever upstream
+# had just published). Bump deliberately and run playbooks/portainer.yml.
+portainer_version: "2.45.2"
