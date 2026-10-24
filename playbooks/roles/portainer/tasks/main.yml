@@ -29,10 +29,10 @@
     state: present
   become: true
 
-- name: Pull latest Portainer image
+- name: Pull pinned Portainer image
   community.docker.docker_image:
     name: portainer/portainer-ce
-    tag: latest
+    tag: "{{ portainer_version }}"
     source: pull
   become: true
   tags: [portainer_update]
@@ -40,7 +40,7 @@
 - name: Ensure Portainer container is running and recreate if needed
   community.docker.docker_container:
     name: portainer
-    image: portainer/portainer-ce:latest
+    image: "portainer/portainer-ce:{{ portainer_version }}"
     state: started
     restart_policy: always
     recreate: true
