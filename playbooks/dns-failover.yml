@@ -1,0 +1,84 @@
+---
+# Add the backup Pi-hole as a second nameserver on the RKE2 mgmt VMs.
+#
+# Their DNS is set by cloud-init (/etc/netplan/50-cloud-init.yaml) to 10.0.3.2
+# only, so they never use the router and get no failover while yavin1 is down.
+# A separate 60- netplan file adds `dns_failover_servers`; netplan appends
+# nameserver lists across files, and cloud-init never touches the 60- file.
+#
+# Applied with `netplan generate` + `networkctl reload`, NOT `netplan apply`:
+# apply can replug interfaces that use set-name (eth0 here) underneath RKE2.
+# reload only reconfigures the link whose .network file changed; addresses and
+# routes are unchanged, so it is a DNS-only change. One node at a time, and
+# each node must resolve through the new list before the next one starts.
+#
+#   ansible-playbook playbooks/dns-failover.yml --ask-become-pass
+- name: Add failover nameservers to RKE2 mgmt nodes
+  hosts: rke2-mgmt
+  gather_facts: false
+  serial: 1
+  any_errors_fatal: true
+  vars:
+    dns_failover_iface: eth0
+    dns_failover_netplan: /etc/netplan/60-dns-failover.yaml
+  tasks:
+    - name: Read cloud-init netplan config
+      ansible.builtin.slurp:
+        src: /etc/netplan/50-cloud-init.yaml
+      register: cloud_init_netplan
+      become: true
+
+    # The override merges by interface id; if cloud-init ever names it
+    # differently the new file would define a second, unmatched interface.
+    - name: Confirm cloud-init defines the interface being extended
+      ansible.builtin.assert:
+        that:
+          - (cloud_init_netplan.content | b64decode | from_yaml).network.ethernets[dns_failover_iface] is defined
+        fail_msg: "50-cloud-init.yaml has no ethernets.{{ dns_failover_iface }}; not adding an override."
+
+    - name: Write failover nameserver override
+      ansible.builtin.copy:
+        dest: "{{ dns_failover_netplan }}"
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          # Managed by homelab-ansible playbooks/dns-failover.yml.
+          # Appends to the nameservers cloud-init sets in 50-cloud-init.yaml.
+          network:
+            version: 2
+            ethernets:
+              {{ dns_failover_iface }}:
+                nameservers:
+                  addresses: {{ dns_failover_servers | to_json }}
+      register: dns_override
+      become: true
+
+    - name: Regenerate systemd-networkd config
+      ansible.builtin.command: netplan generate
+      when: dns_override.changed
+      changed_when: true
+      become: true
+
+    - name: Reload systemd-networkd
+      ansible.builtin.command: networkctl reload
+      when: dns_override.changed
+      changed_when: true
+      become: true
+
+    - name: Wait for resolved to list every nameserver on the link
+      ansible.builtin.command: resolvectl dns {{ dns_failover_iface }}
+      register: link_dns
+      changed_when: false
+      until: dns_failover_servers | difference(link_dns.stdout.split()) | length == 0
+      retries: 10
+      delay: 3
+      when: not ansible_check_mode
+
+    - name: Resolve a public and a lab name through the stub resolver
+      ansible.builtin.command: resolvectl query {{ item }}
+      loop:
+        - github.com
+        - rancher.mgmt.wretchedhive.io
+      changed_when: false
+      when: not ansible_check_mode

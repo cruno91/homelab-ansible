@@ -1,6 +1,12 @@
 # Cluster identity
 rke2_cluster_name: rke2-mgmt
 
+# Extra nameservers after cloud-init's 10.0.3.2 (playbooks/dns-failover.yml).
+# 10.0.3.20 is the edge cluster's kube-vip VIP; the backup Pi-hole
+# (homelab-gitops apps/pihole-edge) answers 53 on every edge node address.
+dns_failover_servers:
+  - 10.0.3.20
+
 # Control plane VIP (managed by kube-vip). Reachable on :6443 (kube API)
 # and :9345 (RKE2 supervisor / join port).
 rke2_vip: 10.0.3.40
