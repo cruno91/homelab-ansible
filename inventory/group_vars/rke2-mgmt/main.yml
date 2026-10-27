@@ -165,4 +165,4 @@ argocd_release_name: argocd
 argocd_chart_repo_name: argo
 argocd_chart_repo_url: https://argoproj.github.io/argo-helm
 argocd_chart_ref: argo/argo-cd
-argocd_chart_version: "9.5.21"
+argocd_chart_version: "10.11.6"
