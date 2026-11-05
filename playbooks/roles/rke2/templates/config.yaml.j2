@@ -17,6 +17,11 @@ disable:
   - {{ component }}
 {% endfor %}
 {% endif %}
+{% if rke2_ingress_controller | default('') | length > 0 %}
+{# Bundled ingress controller(s); `none` disables them all. See the
+   rke2_ingress_controller comment in group_vars for why mgmt pins this. #}
+ingress-controller: {{ rke2_ingress_controller }}
+{% endif %}
 etcd-snapshot-schedule-cron: "{{ rke2_etcd_snapshot_cron }}"
 etcd-snapshot-retention: {{ rke2_etcd_snapshot_retention }}
 etcd-snapshot-dir: "{{ rke2_etcd_snapshot_dir }}"
