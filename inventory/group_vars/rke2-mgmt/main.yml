@@ -31,22 +31,25 @@ rke2_settle_seconds: 90
 # already-deployed component (RKE2 server-config semantics), so this is how a
 # bundled component is removed from a live cluster.
 #
-# EMPTY TODAY ON PURPOSE. Plan v2 W2 adds `rke2-ingress-nginx` here, but only
-# inside the cutover window — Traefik must already be merged and waiting on the
-# hostPort conflict, or the mgmt control planes are simply unreachable with
-# nothing to serve them. See homelab-gitops
-# docs/runbooks/mgmt-httproute-migration.md.
-# CUTOVER VALUE (plan v2 W2, set 2026-09-12). Empty on main; populated only on
-# the cutover branch. Applying this via playbooks/rke2-mgmt-reconfigure.yml
-# DELETES the deployed rke2-ingress-nginx (RKE2 `disable` semantics), freeing
-# hostPorts 80/443 for Traefik.
-#
-# ORDER MATTERS: the gitops branch must already be merged and the mgmt wildcard
-# Certificate READY in ns `traefik` before this runs, or the control planes have
-# nothing serving them. See homelab-gitops
-# docs/runbooks/mgmt-httproute-migration.md, step 3.
+# rke2-ingress-nginx was removed in plan v2 W2 (2026-09-17) to free hostPorts
+# 80/443 for the gitops-managed Traefik DaemonSet (ADR-0010; homelab-gitops
+# docs/runbooks/mgmt-httproute-migration.md). `rke2_ingress_controller: none`
+# below now covers it too; the entry stays so the intent is explicit.
 rke2_disable:
   - rke2-ingress-nginx
+
+# Which bundled ingress controller RKE2 deploys. `none` disables every bundled
+# ingress chart and its CRD chart (rke2-ingress-nginx, rke2-traefik, and their
+# -crd charts). mgmt's ingress is the gitops-managed Traefik.
+#
+# Required from RKE2 v1.36: when this is unset, 1.36 picks the default by looking
+# for an ingress-nginx HelmChart. mgmt has none (disabled above), so it would
+# deploy rke2-traefik and rke2-traefik-crd: a second controller fighting ours
+# for hostPorts 80/443 (Rancher + Argo CD), plus Gateway API CRDs that Argo
+# already owns (rke2 pkg/bootstrap/bootstrap.go, updateManifests). Must be in
+# config.yaml BEFORE the 1.36 upgrade: rke2-mgmt-update.yml doesn't rewrite
+# config.yaml, so apply it with rke2-mgmt-reconfigure.yml first.
+rke2_ingress_controller: none
 
 rke2_etcd_snapshot_cron: "0 */6 * * *"
 rke2_etcd_snapshot_retention: 10
