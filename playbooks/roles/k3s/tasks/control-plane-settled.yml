@@ -1,0 +1,79 @@
+---
+# Gate: a rebooted or upgraded server is not "back" until its embedded etcd member
+# AND every other server's etcd are healthy, continuously, for a settle window.
+#
+# Why: node `Ready` comes from the kubelet and says nothing about the node's etcd
+# member. On 2026-10-18 the RKE2 equivalent of this role moved on while a Ready
+# node's etcd was still crash-looping, and mgmt lost quorum for ~2 minutes
+# (roles/rke2/tasks/control-plane-settled.yml is that fix). Include this after
+# "Wait for node to report Ready" and before the uncordon, so the next serial host
+# never starts against an unsettled cluster.
+#
+# K3s embeds etcd in the k3s process and ships no etcdctl, so the checks differ
+# from RKE2's:
+#   - etcd's plain-HTTP /health is only on 127.0.0.1:2381 (the metrics listener;
+#     2379 is gRPC-only), so it can only be read on the node itself. It reports
+#     false when the member has no leader.
+#   - every server's API server reads its *local* etcd member, so
+#     `/readyz/etcd` on each server's own IP covers every member from one place.
+#   - an etcd restart is a k3s restart: watch the unit's MainPID and NRestarts.
+# Each kubectl call names its server explicitly, so it works from this node even
+# while its own API is still settling.
+
+- name: List the etcd servers to check
+  ansible.builtin.set_fact:
+    k3s_etcd_server_ips: "{{ groups['k3s-edge'] | map('extract', hostvars, 'ansible_host') | list }}"
+
+- name: Wait for the local etcd member on {{ ansible_hostname }} to report healthy
+  ansible.builtin.uri:
+    url: http://127.0.0.1:2381/health
+    return_content: true
+  register: k3s_local_etcd_health
+  # etcd serves this as text/plain, so uri leaves .json empty; parse the body.
+  until: >-
+    k3s_local_etcd_health.status == 200
+    and ((k3s_local_etcd_health.content | default('{}') | from_json).health | default('false')) == 'true'
+  retries: 30
+  delay: 10
+
+- name: Wait for every server's etcd to report ready
+  ansible.builtin.command: >-
+    k3s kubectl --server https://{{ item }}:6443 get --raw /readyz/etcd
+  loop: "{{ k3s_etcd_server_ips }}"
+  become: true
+  register: k3s_etcd_ready
+  until: k3s_etcd_ready.rc == 0 and k3s_etcd_ready.stdout == 'ok'
+  retries: 30
+  delay: 10
+  changed_when: false
+
+- name: Settle - etcd must stay healthy for {{ k3s_settle_seconds }}s
+  ansible.builtin.shell: |
+    set -euo pipefail
+    N={{ ansible_hostname }}
+    HELPER={{ hostvars[k3s_helper_node]['ansible_host'] }}
+    unit() { systemctl show k3s -p MainPID -p NRestarts --value | tr '\n' ' '; }
+    start_unit=$(unit)
+    end=$(( $(date +%s) + {{ k3s_settle_seconds }} ))
+    while [ "$(date +%s)" -lt "$end" ]; do
+      [ "$(k3s kubectl --server "https://$HELPER:6443" get node "$N" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')" = "True" ] \
+        || { echo "node $N left Ready during settle"; exit 1; }
+      curl -sf --max-time 5 http://127.0.0.1:2381/health | grep -q '"health":"true"' \
+        || { echo "local etcd member on $N unhealthy during settle"; exit 1; }
+      for ip in {{ k3s_etcd_server_ips | join(' ') }}; do
+        [ "$(k3s kubectl --server "https://$ip:6443" get --raw /readyz/etcd)" = "ok" ] \
+          || { echo "etcd behind $ip not ready during settle"; exit 1; }
+      done
+      [ "$(unit)" = "$start_unit" ] \
+        || { echo "k3s on $N restarted during settle"; exit 1; }
+      sleep 10
+    done
+    echo "etcd settled for {{ k3s_settle_seconds }}s after $N came back"
+  args:
+    executable: /bin/bash
+  become: true
+  register: k3s_settle
+  until: k3s_settle.rc == 0
+  retries: 5
+  delay: 15
+  changed_when: false

@@ -1,8 +1,8 @@
 ---
-# One-at-a-time reboot for a K3s dev node. Caller play must use serial: 1.
+# One-at-a-time reboot for a K3s edge node. Caller play must use serial: 1.
 # Drains via a helper node, reboots, waits for the local k3s API and node
-# Ready, then uncordons — same shape as update.yml so etcd quorum (2-of-3)
-# is preserved.
+# Ready and a settled etcd cluster, then uncordons — same shape as update.yml
+# so etcd quorum (2-of-3) is preserved.
 #
 # Inputs:
 #   k3s_reboot_force (bool, default false)
@@ -86,6 +86,9 @@
   delegate_to: "{{ k3s_helper_node }}"
   become: true
   changed_when: false
+
+- name: Gate on etcd cluster health before uncordon
+  ansible.builtin.include_tasks: control-plane-settled.yml
 
 - name: Uncordon {{ ansible_hostname }}
   ansible.builtin.command: k3s kubectl uncordon {{ ansible_hostname }}

@@ -157,16 +157,16 @@ The playbook is `serial: 1` with `any_errors_fatal: true`. For each node:
 3. Run the install script with the pinned `INSTALL_K3S_CHANNEL` / `INSTALL_K3S_VERSION`. The script restarts K3s in place.
 4. Wait for local API on `:6443`.
 5. Wait for `kubectl wait --for=condition=Ready node/<name>` from a peer.
-6. Uncordon.
+6. **etcd settled** (`tasks/control-plane-settled.yml`): the node's local etcd member reports
+   healthy, every server's `/readyz/etcd` is `ok`, and both stay that way with no `k3s` restart for
+   `k3s_settle_seconds` (90).
+7. Uncordon.
 
-If step 5 fails, Ansible halts before touching the next node.
-
-> **⚠ No etcd gate yet.** Node `Ready` says nothing about the node's embedded etcd member. On
-> 2026-10-18 the RKE2 equivalent of this play moved on while a `Ready` node's etcd was still
-> crash-looping and mgmt lost quorum. RKE2 now waits for etcd to settle (`rke2/tasks/control-plane-settled.yml`);
-> this role doesn't (K3s ships no `etcdctl`, so the check has to be different). Until it does, run
-> one node at a time with `--limit <node>` and, before the next, confirm all three nodes `Ready`, the
-> VIP answering, and a minute or two of quiet. The same applies to the safe-reboot play.
+If step 5 or 6 fails, Ansible halts before touching the next node, so etcd quorum (2-of-3) stays intact.
+Step 6 exists because node `Ready` comes from the kubelet and says nothing about etcd: on 2026-10-18 the
+RKE2 equivalent of this play moved on while a `Ready` node's etcd was still crash-looping, and mgmt lost
+quorum. K3s embeds etcd and ships no `etcdctl`, so the checks use etcd's localhost-only `/health`
+(`127.0.0.1:2381`) and each server's API `/readyz/etcd` instead.
 
 ### Tip: config-only restart
 
@@ -196,9 +196,10 @@ The K3s reboot path is `serial: 1` with `any_errors_fatal: true`. For each node:
 3. Reboot the target. The `ansible.builtin.reboot` module waits for SSH to come back.
 4. Wait for the local K3s API on `:6443`.
 5. `kubectl wait --for=condition=Ready node/<name>` from the helper.
-6. Uncordon.
+6. etcd settled (same gate as the rolling upgrade, step 6).
+7. Uncordon.
 
-If step 5 fails, Ansible halts before touching the next node — etcd quorum (2-of-3) stays intact.
+If step 5 or 6 fails, Ansible halts before touching the next node — etcd quorum (2-of-3) stays intact.
 
 When `site.yml --tags os_upgrade` runs, the K3s safe-reboot play also runs, but each host's `safe-reboot.yml` checks `/var/run/reboot-required` first and `end_host`s itself if no reboot is needed. So nodes that didn't need to reboot after `apt upgrade` skip the drain/reboot dance entirely.
 
@@ -427,8 +428,8 @@ export KUBECONFIG=$(pwd)/kubeconfig-k3s-edge.yaml
    (order is dev → edge → mgmt; see `homelab-gitops/docs/runbooks/routine-upgrades.md`).
 2. Snapshot etcd.
 3. Bump `k3s_version` in `inventory/group_vars/k3s-edge.yml`.
-4. `ansible-playbook -i inventory/hosts.ini playbooks/k3s-edge-update.yml --ask-become-pass --limit <node>`,
-   one node at a time (see the etcd-gate warning in [Routine upgrades](#routine-upgrades)).
+4. `ansible-playbook -i inventory/hosts.ini playbooks/k3s-edge-update.yml --ask-become-pass`
+   (serial, etcd-gated; see [Routine upgrades](#routine-upgrades)).
 5. Run the health checks.
 
 ### "I want to reboot the cluster"
