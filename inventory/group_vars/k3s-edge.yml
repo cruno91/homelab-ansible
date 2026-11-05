@@ -47,7 +47,7 @@ k3s_etcd_snapshot_dir: /var/lib/rancher/k3s/server/db/snapshots
 kubevip_iface: eth0
 
 # kube-vip container version
-kubevip_version: v1.0.4
+kubevip_version: v1.3.1
 
 # K3s install script location
 k3s_install_script: /tmp/k3s-install.sh
