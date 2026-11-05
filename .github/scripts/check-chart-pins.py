@@ -14,6 +14,7 @@ ANSIBLE_VARS = "inventory/group_vars/rke2-mgmt/main.yml"
 PAIRS = {
     "certmanager_chart_version": ("platform/cert-manager/appset.yaml", "cert-manager"),
     "argocd_chart_version":      ("bootstrap/argocd-app.yaml",         "argo-cd"),
+    "rancher_chart_version":     ("clusters/mgmt/rancher.yaml",        "rancher"),
 }
 
 def fetch(path):

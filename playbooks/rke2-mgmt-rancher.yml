@@ -1,8 +1,10 @@
 ---
 # Bootstrap-only: installs Rancher via Helm on the rke2-mgmt cluster.
 # Requires cert-manager to be present already (rke2-mgmt-certmanager.yml).
-# After Argo CD adopts homelab-gitops, Rancher version + values move into
-# Git; this play is then only re-run during a full teardown drill.
+# Day 0 only. Since 2026-11-01 Argo CD owns Rancher (homelab-gitops
+# clusters/mgmt/rancher.yaml); upgrades and value changes go there. Re-running
+# this on a live cluster fights Argo for the release. Keep
+# rancher_chart_version equal to that file's targetRevision (CI checks it).
 - name: Install Rancher on rke2-mgmt
   hosts: localhost
   connection: local
