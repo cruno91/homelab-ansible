@@ -1,11 +1,12 @@
 ---
 collections:
-# Pinned exactly (2026-10-18, latest on Galaxy). Bump deliberately, then run
+# Pinned exactly (2026-10-18, latest on Galaxy; general 13.5.1 on 2026-11-04 -- 14.0.0
+# held, a 2-day-old major). Bump deliberately, then run
 #   ansible-galaxy collection install -r requirements.yml --upgrade
   - name: community.docker
     version: "==5.4.0"
   - name: community.general
-    version: "==13.5.0"
+    version: "==13.5.1"
   # kubernetes.core supplies the helm + helm_repository + k8s modules used by
   # the rke2-mgmt bootstrap playbooks (cert-manager, Rancher, Argo CD). The
   # `helm` binary must also be on PATH on whichever host runs the helm task —
