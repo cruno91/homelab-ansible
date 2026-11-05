@@ -24,7 +24,7 @@
   ansible.builtin.set_fact:
     k3s_etcd_server_ips: "{{ groups['k3s-edge'] | map('extract', hostvars, 'ansible_host') | list }}"
 
-- name: Wait for the local etcd member on {{ ansible_hostname }} to report healthy
+- name: Wait for the local etcd member on {{ ansible_facts['hostname'] }} to report healthy
   ansible.builtin.uri:
     url: http://127.0.0.1:2381/health
     return_content: true
@@ -50,7 +50,7 @@
 - name: Settle - etcd must stay healthy for {{ k3s_settle_seconds }}s
   ansible.builtin.shell: |
     set -euo pipefail
-    N={{ ansible_hostname }}
+    N={{ ansible_facts['hostname'] }}
     HELPER={{ hostvars[k3s_helper_node]['ansible_host'] }}
     unit() { systemctl show k3s -p MainPID -p NRestarts --value | tr '\n' ' '; }
     start_unit=$(unit)

@@ -29,7 +29,7 @@
   hosts: "{{ groups['k3s-edge'] | reject('equalto', target_node) | list | first }}"  # noqa: syntax-check[specific]
   gather_facts: false
   vars:
-    k3s_node_name: "{{ hostvars[target_node].ansible_hostname }}"
+    k3s_node_name: "{{ hostvars[target_node].ansible_facts['hostname'] }}"
   tasks:
     - name: Drain {{ k3s_node_name }}
       ansible.builtin.command: >-
