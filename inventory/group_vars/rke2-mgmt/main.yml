@@ -18,7 +18,7 @@ rke2_vip: 10.0.3.40
 rke2_channel: "stable"
 # Pinned 2026-10-18 at the version actually running. An empty value meant "whatever
 # the stable channel served on install day", so a rebuild was not reproducible.
-rke2_version: "v1.35.5+rke2r2"
+rke2_version: "v1.36.5+rke2r1"
 
 # Seconds the control plane + every etcd member must stay continuously healthy after
 # a node returns from reboot/upgrade, before the serial play uncordons it and moves on
