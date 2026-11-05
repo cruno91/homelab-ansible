@@ -26,7 +26,9 @@ Proxmox hosts run VMs, so the reboot decision belongs to a human. The `base` rol
 - `--tags os_upgrade` patches packages and leaves any pending reboot for you.
 - `--tags manual_reboot` is a no-op on Proxmox hosts.
 
-If `/var/run/reboot-required` is set after an `os_upgrade` run, schedule the reboot yourself once VMs are in a state you're happy with.
+Don't wait for `/var/run/reboot-required`: Proxmox doesn't install `update-notifier-common`, so the file never appears, even after a kernel upgrade. After an `os_upgrade` run, compare `uname -r` with the newest `/lib/modules/*-pve` entry. If they differ, schedule the reboot yourself once VMs are in a state you're happy with.
+
+A host reboot takes the whole mgmt cluster down (~5 min), because all three RKE2 VMs live here. The procedure (shut the VMs down over ACPI, reboot, wait for `onboot: 1` to bring them back, then the Rancher agent check) is in `homelab-gitops/docs/runbooks/routine-upgrades.md`, *Proxmox host*.
 
 The **one exception** is the first-run post-install below, which reboots the node exactly once (driven by Ansible's `reboot` module, not the script) and then drops a marker file so it never runs again.
 

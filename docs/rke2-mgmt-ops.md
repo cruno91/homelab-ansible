@@ -76,7 +76,11 @@ If the bootstrap node has no RKE2 but other nodes do, it fails fast. This preven
 
 ## Routine upgrades
 
-RKE2 release is pinned in `inventory/group_vars/rke2-mgmt.yml`:
+How often, in what order relative to Rancher and the other clusters, and the full gate: see the
+standing runbook `homelab-gitops/docs/runbooks/routine-upgrades.md`. Only take versions in the running
+Rancher release's certified list.
+
+RKE2 release is pinned in `inventory/group_vars/rke2-mgmt/main.yml`:
 
 - `rke2_channel` — release channel (`stable`, `latest`, `v1.31`, …). Default `stable`.
 - `rke2_version` — exact version (e.g. `v1.31.5+rke2r1`). Overrides channel when set.
@@ -95,9 +99,14 @@ ansible-playbook playbooks/rke2-mgmt-update.yml --ask-become-pass
 4. **Restart `rke2-server`** — unlike K3s, RKE2's install script does not restart the service when binaries change, so the role does it explicitly.
 5. Wait for local API on `:6443` + `/readyz`.
 6. `kubectl wait --for=condition=Ready node/<name>` from a peer.
-7. Uncordon.
+7. **Control plane settled** (`tasks/control-plane-settled.yml`): the node's etcd, kube-apiserver,
+   controller-manager and scheduler static pods are Ready, `etcdctl endpoint health --cluster` reports
+   every member healthy, and both stay that way with no etcd restart for `rke2_settle_seconds`.
+8. Uncordon.
 
-If step 6 fails, Ansible halts before touching the next node — etcd quorum (2-of-3) stays intact.
+If step 6 or 7 fails, Ansible halts before touching the next node, so etcd quorum (2-of-3) stays intact.
+Step 7 exists because node `Ready` comes from the kubelet and says nothing about etcd: on 2026-10-18 a
+node was `Ready` while its etcd member crash-looped, the play moved on, and mgmt lost quorum for ~2 min.
 
 ### Config-only restart
 
@@ -116,7 +125,7 @@ ansible-playbook playbooks/rke2-mgmt-reboot.yml \
   --ask-become-pass --limit rke2-mgmt-node-2
 ```
 
-Same shape as K3s: `serial: 1`, drain → reboot → wait for local RKE2 API → wait for Ready → uncordon. The OS-upgrade path (`site.yml --tags os_upgrade`) uses the same task file with `rke2_reboot_force: false`, so a node that didn't need to reboot after `apt upgrade` skips the dance entirely.
+Same shape as K3s: `serial: 1`, drain → reboot → wait for local RKE2 API → wait for Ready → control plane settled (step 7 above) → uncordon. The OS-upgrade path (`site.yml --tags os_upgrade`) uses the same task file with `rke2_reboot_force: false`, so a node that didn't need to reboot after `apt upgrade` skips the dance entirely.
 
 The base role's simple `ansible.builtin.reboot` tasks self-skip for hosts in the `rke2-mgmt` group — the safe-reboot plays own the reboot for those nodes (parallel to `k3s-edge` and `proxmox`).
 

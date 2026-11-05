@@ -135,6 +135,10 @@ existing cluster](#applying-day-2-ops-changes-to-an-existing-cluster):
 
 ## Routine upgrades
 
+How often, in what order relative to Rancher and the other clusters, and the full gate: see the
+standing runbook `homelab-gitops/docs/runbooks/routine-upgrades.md`. Only take versions in the running
+Rancher release's certified list.
+
 K3s release is pinned in `inventory/group_vars/k3s-edge.yml`:
 
 - `k3s_channel` — release channel (`stable`, `latest`, `v1.31`, …). Default `stable`.
@@ -155,7 +159,14 @@ The playbook is `serial: 1` with `any_errors_fatal: true`. For each node:
 5. Wait for `kubectl wait --for=condition=Ready node/<name>` from a peer.
 6. Uncordon.
 
-If step 5 fails, Ansible halts before touching the next node — etcd quorum (2-of-3) stays intact.
+If step 5 fails, Ansible halts before touching the next node.
+
+> **⚠ No etcd gate yet.** Node `Ready` says nothing about the node's embedded etcd member. On
+> 2026-10-18 the RKE2 equivalent of this play moved on while a `Ready` node's etcd was still
+> crash-looping and mgmt lost quorum. RKE2 now waits for etcd to settle (`rke2/tasks/control-plane-settled.yml`);
+> this role doesn't (K3s ships no `etcdctl`, so the check has to be different). Until it does, run
+> one node at a time with `--limit <node>` and, before the next, confirm all three nodes `Ready`, the
+> VIP answering, and a minute or two of quiet. The same applies to the safe-reboot play.
 
 ### Tip: config-only restart
 
@@ -165,12 +176,12 @@ If you want to restart K3s to pick up a `config.yaml` change without bumping the
 
 ## Safe rolling reboot
 
-Reboot the cluster one node at a time, preserving etcd quorum the same way the rolling upgrade does. Use this any time something asks for a reboot — OS upgrades that set `/var/run/reboot-required`, kernel changes, firmware updates, manual maintenance, etc.
+Reboot the cluster one node at a time, preserving etcd quorum the same way the rolling upgrade does. Use this any time something asks for a reboot — kernel changes, firmware updates, manual maintenance, etc. **On these Pis that includes every OS upgrade that installs a kernel**: see the note on `reboot-required` below.
 
 Entry points:
 
 ```bash
-# Reboot only the K3s dev cluster.
+# Reboot only the K3s edge cluster.
 ansible-playbook -i inventory/hosts.ini playbooks/k3s-edge-reboot.yml --ask-become-pass
 
 # Reboot a single K3s node.
@@ -190,6 +201,8 @@ The K3s reboot path is `serial: 1` with `any_errors_fatal: true`. For each node:
 If step 5 fails, Ansible halts before touching the next node — etcd quorum (2-of-3) stays intact.
 
 When `site.yml --tags os_upgrade` runs, the K3s safe-reboot play also runs, but each host's `safe-reboot.yml` checks `/var/run/reboot-required` first and `end_host`s itself if no reboot is needed. So nodes that didn't need to reboot after `apt upgrade` skip the drain/reboot dance entirely.
+
+**Raspberry Pi OS never writes `/var/run/reboot-required`** (that file comes from `update-notifier-common`, which it doesn't install). So `os_upgrade` patches the Pis and *always* skips the reboot, and a new kernel stays unbooted until something reboots the node. After every OS upgrade, compare `uname -r` with the newest `/lib/modules` entry of the same flavor (the command is in `homelab-gitops/docs/runbooks/routine-upgrades.md`, *OS patches*) and run `k3s-edge-reboot.yml` if they differ.
 
 The simple `ansible.builtin.reboot` tasks in the `base` role self-skip for hosts in the `k3s-edge` group — the safe-reboot plays own the reboot for those nodes.
 
@@ -292,7 +305,7 @@ The install playbook stages these into `/var/lib/rancher/k3s/server/manifests/` 
 
 kube-vip claims `k3s_vip` (`10.0.3.20`) via ARP on `eth0`, with leader election among the pods. Exactly one node holds the VIP at any time. The K3s server cert includes the VIP as a SAN, so `kubectl` targeting `https://10.0.3.20:6443` survives any single server going down.
 
-To change kube-vip itself: bump `kubevip_version` (or edit the template) in `inventory/group_vars/k3s-edge.yml`, then re-run the install playbook. K3s reconciles the updated manifest in place — no restart needed.
+To change kube-vip itself: bump `kubevip_version` (or edit the template) in `inventory/group_vars/k3s-edge.yml`, then run `ansible-playbook playbooks/kubevip-update.yml --limit k3s-edge --ask-become-pass`. It re-stages only the kube-vip manifest on the first server, and K3s's deploy controller rolls the DaemonSet. No K3s restart is needed. Watch `https://10.0.3.20:6443/version` while it rolls; it should miss for a few seconds at most.
 
 ### Failover test
 
@@ -410,9 +423,13 @@ export KUBECONFIG=$(pwd)/kubeconfig-k3s-edge.yaml
 
 ### "I want to upgrade K3s"
 
-1. Bump `k3s_channel` or `k3s_version` in `inventory/group_vars/k3s-edge.yml`.
-2. `ansible-playbook -i inventory/hosts.ini playbooks/k3s-edge-update.yml --ask-become-pass`
-3. Run the health checks.
+1. Check the version is in the running Rancher's certified list, and that dev has already taken it
+   (order is dev → edge → mgmt; see `homelab-gitops/docs/runbooks/routine-upgrades.md`).
+2. Snapshot etcd.
+3. Bump `k3s_version` in `inventory/group_vars/k3s-edge.yml`.
+4. `ansible-playbook -i inventory/hosts.ini playbooks/k3s-edge-update.yml --ask-become-pass --limit <node>`,
+   one node at a time (see the etcd-gate warning in [Routine upgrades](#routine-upgrades)).
+5. Run the health checks.
 
 ### "I want to reboot the cluster"
 
@@ -422,7 +439,7 @@ See [Safe rolling reboot](#safe-rolling-reboot). One node at a time, drained, qu
 
 1. `ansible-playbook -i inventory/hosts.ini playbooks/k3s-edge-install.yml --ask-become-pass` — stages new files. Idempotent.
 2. If the change requires a K3s restart (anything in `config.yaml`), run the update playbook to roll a restart through the cluster.
-3. If the change is only kube-vip manifests, no restart needed — K3s auto-reconciles.
+3. If the change is only kube-vip, use `playbooks/kubevip-update.yml --limit k3s-edge` instead. No restart needed; K3s auto-reconciles.
 
 ### "I want to add a node"
 

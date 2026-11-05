@@ -22,7 +22,7 @@ Anything else (Harbor, observability, ClusterIssuers, ingress configuration, Ran
 
 ### On the workstation (Ansible controller)
 
-- `helm` v3.x on `$PATH` — the bootstrap plays delegate Helm execution to `localhost`.
+- `helm` on `$PATH` (Rancher 2.12+ needs ≥ 3.18; Helm 4 works) — the bootstrap plays delegate Helm execution to `localhost`.
 - `kubernetes.core` collection installed: `ansible-galaxy collection install -r requirements.yml`.
 - `kubeconfig-rke2-mgmt.yaml` present at the repo root — fetch with `playbooks/rke2-mgmt-kubeconfig.yml`.
 
@@ -61,11 +61,17 @@ Non-secret defaults live in `inventory/group_vars/rke2-mgmt/main.yml` under the 
 | Var | File | Default | Notes |
 |---|---|---|---|
 | `bootstrap_kubeconfig` | `main.yml` | `kubeconfig-rke2-mgmt.yaml` at repo root | The admin kubeconfig the local helm task uses |
-| `certmanager_chart_version` | `main.yml` | pinned | Bump deliberately; check Rancher compatibility before raising |
-| `rancher_chart_version` | `main.yml` | pinned | Match to the K8s minor version RKE2 is running |
+| `certmanager_chart_version` | `main.yml` | pinned | **Mirror of** gitops `platform/cert-manager/appset.yaml` |
+| `rancher_chart_version` | `main.yml` | pinned | **Mirror of** gitops `clusters/mgmt/rancher.yaml` |
 | `rancher_hostname` | `main.yml` | `rancher.yavin.internal` | **Override per environment** — must be reachable in DNS |
 | `rancher_bootstrap_password` | `secrets.yml` | placeholder | **Override locally** — value never enters git |
-| `argocd_chart_version` | `main.yml` | pinned | Bare install — extra config comes via gitops |
+| `argocd_chart_version` | `main.yml` | pinned | **Mirror of** gitops `bootstrap/argocd-app.yaml`. Bare install — extra config comes via gitops |
+
+The three chart pins are **never bumped here first**. Argo CD owns all three releases on a running
+cluster, so an upgrade is a gitops PR. Once it has rolled out, the matching pin here is updated so a
+from-scratch rebuild installs the same version Argo expects. The `version-sync` CI job
+(`.github/scripts/check-chart-pins.py`, also weekly) fails if they differ. Procedure:
+`homelab-gitops/docs/runbooks/routine-upgrades.md`.
 
 ---
 
@@ -104,19 +110,16 @@ The single-component plays skip the preflight in the wrapper. If the kubeconfig 
 3. Set a real admin password.
 4. The plan's Week 6 work (importing the Pi K3s cluster, registering Harvester) happens through this UI.
 
-### Swapping to real TLS later
+### Handing Rancher to Argo CD
 
-When the Cloudflare DNS-01 ClusterIssuer is up (via `homelab-gitops`), re-template the Rancher release with:
+Rancher only stays a playbook-managed Helm release until Argo is up. From then on it's the `rancher`
+Application in `homelab-gitops/clusters/mgmt/rancher.yaml`, with the same chart version and values
+minus `bootstrapPassword`. That file is where real TLS (`tls: external`, served by mgmt's Traefik
+Gateway), upgrades and value changes live. On a rebuild, Argo adopts the release this play installed
+with no restart, provided the two agree on chart version and values. Keep the role's values in step
+with that file's `valuesObject`.
 
-```yaml
-ingress:
-  tls:
-    source: secret
-  extraAnnotations:
-    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
-```
-
-That change lives in the gitops repo, **not in this Ansible repo**. Do not re-run `rke2-mgmt-rancher.yml` with self-signed after gitops takes over — you'll fight Argo for ownership.
+**Do not re-run `rke2-mgmt-rancher.yml` on a live cluster.** You'll fight Argo for ownership.
 
 ---
 
@@ -145,7 +148,7 @@ From that moment, the plan's operating rule #1 applies: **Git or it didn't happe
 |---|---|
 | Cloudflare DNS-01 ClusterIssuer | `homelab-gitops/platform/cert-manager/` |
 | Wildcard Certificate for `*.lab.<domain>` | `homelab-gitops/platform/cert-manager/` |
-| Rancher's real TLS cert (`ingress.tls.source=secret`) | Re-template the Rancher Application in `homelab-gitops` |
+| Rancher's real TLS, upgrades, value changes | The `rancher` Application, `homelab-gitops/clusters/mgmt/rancher.yaml` |
 | Argo CD ingress / RBAC / SSO / repo creds | `homelab-gitops/platform/argocd/` |
 | Harbor, observability, External-DNS, gateway | `homelab-gitops/platform/<component>/` |
 | Downstream cluster registration (Pi K3s, Harvester) | Rancher UI (Phase 1) then `homelab-gitops` (Phase 6) |

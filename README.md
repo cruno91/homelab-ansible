@@ -149,6 +149,13 @@ All three k3s-edge nodes run as K3s servers (HA control plane with embedded etcd
 	ansible-playbook -i inventory/hosts.ini playbooks/site.yml --tags os_upgrade --ask-become-pass
 	```
 
+	In practice, run it one group at a time with `--limit`, least critical first
+	(codeserver-pi → k3s-edge → rke2-mgmt → proxmox → portainer-pi). Raspberry Pis
+	and Proxmox never write `/var/run/reboot-required`, so a new kernel on them is
+	not rebooted into automatically. The order, kernel check and every other
+	routine upgrade (Kubernetes, kube-vip, Portainer, collections) are in the
+	standing runbook, `homelab-gitops/docs/runbooks/routine-upgrades.md`.
+
 4. Update Portainer
 
 	```bash
