@@ -31,9 +31,9 @@
   until: rke2_helper_readyz.rc == 0
   changed_when: false
 
-- name: Drain {{ ansible_hostname }}
+- name: Drain {{ ansible_facts['hostname'] }}
   ansible.builtin.command: >-
-    {{ rke2_bin_dir }}/kubectl drain {{ ansible_hostname }}
+    {{ rke2_bin_dir }}/kubectl drain {{ ansible_facts['hostname'] }}
       --ignore-daemonsets
       --delete-emptydir-data
       --force
@@ -99,7 +99,7 @@
   ansible.builtin.command: >-
     {{ rke2_bin_dir }}/kubectl wait
       --for=condition=Ready
-      node/{{ ansible_hostname }}
+      node/{{ ansible_facts['hostname'] }}
       --timeout=300s
   environment:
     KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
@@ -107,8 +107,8 @@
   become: true
   changed_when: false
 
-- name: Uncordon {{ ansible_hostname }}
-  ansible.builtin.command: "{{ rke2_bin_dir }}/kubectl uncordon {{ ansible_hostname }}"
+- name: Uncordon {{ ansible_facts['hostname'] }}
+  ansible.builtin.command: "{{ rke2_bin_dir }}/kubectl uncordon {{ ansible_facts['hostname'] }}"
   environment:
     KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
   delegate_to: "{{ rke2_helper_node }}"

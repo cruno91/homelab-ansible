@@ -38,9 +38,9 @@
   until: k3s_helper_readyz.rc == 0
   changed_when: false
 
-- name: Drain node before reboot — {{ ansible_hostname }}
+- name: Drain node before reboot — {{ ansible_facts['hostname'] }}
   ansible.builtin.command: >-
-    k3s kubectl drain {{ ansible_hostname }}
+    k3s kubectl drain {{ ansible_facts['hostname'] }}
       --ignore-daemonsets
       --delete-emptydir-data
       --force
@@ -53,7 +53,7 @@
   until: k3s_drain.rc == 0
   changed_when: true
 
-- name: Reboot {{ ansible_hostname }}
+- name: Reboot {{ ansible_facts['hostname'] }}
   ansible.builtin.reboot:
     msg: "Reboot triggered by Ansible (k3s safe-reboot)"
     reboot_timeout: 600
@@ -81,7 +81,7 @@
   ansible.builtin.command: >-
     k3s kubectl wait
       --for=condition=Ready
-      node/{{ ansible_hostname }}
+      node/{{ ansible_facts['hostname'] }}
       --timeout=300s
   delegate_to: "{{ k3s_helper_node }}"
   become: true
@@ -90,8 +90,8 @@
 - name: Gate on etcd cluster health before uncordon
   ansible.builtin.include_tasks: control-plane-settled.yml
 
-- name: Uncordon {{ ansible_hostname }}
-  ansible.builtin.command: k3s kubectl uncordon {{ ansible_hostname }}
+- name: Uncordon {{ ansible_facts['hostname'] }}
+  ansible.builtin.command: k3s kubectl uncordon {{ ansible_facts['hostname'] }}
   delegate_to: "{{ k3s_helper_node }}"
   become: true
   changed_when: true

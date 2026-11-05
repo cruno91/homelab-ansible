@@ -26,7 +26,7 @@ The VMs are provisioned by [`homelab-tofu`](https://github.com/cruno91/homelab-t
 
 ### Inventory hostname vs. RKE2 node name
 
-RKE2 registers each node under its system hostname (`hostname --short`), which may differ from the Ansible inventory alias. `kubectl get nodes` shows the system hostname; Ansible inventory uses the alias. Tasks that call `kubectl` against a node by name use `ansible_hostname` so they target the registered name.
+RKE2 registers each node under its system hostname (`hostname --short`), which may differ from the Ansible inventory alias. `kubectl get nodes` shows the system hostname; Ansible inventory uses the alias. Tasks that call `kubectl` against a node by name use `ansible_facts['hostname']` so they target the registered name.
 
 ---
 

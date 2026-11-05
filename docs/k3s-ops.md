@@ -31,7 +31,7 @@ K3s registers each node under its **system hostname** (`hostname --short`), whic
 | `k3s-edge-node-2` | `yavin3` |
 | `k3s-edge-node-3` | `yavin4` |
 
-`kubectl get nodes` shows the system hostname. Ansible inventory uses the alias. Playbooks that need to address a node via `kubectl` (drain, uncordon, delete) read `ansible_hostname` so they target the K3s name, not the inventory alias.
+`kubectl get nodes` shows the system hostname. Ansible inventory uses the alias. Playbooks that need to address a node via `kubectl` (drain, uncordon, delete) read `ansible_facts['hostname']` so they target the K3s name, not the inventory alias.
 
 ---
 
@@ -493,10 +493,6 @@ If you re-order `[k3s-edge]` in `inventory/hosts.ini` so a different host is fir
 ---
 
 ## Known issues
-
-### `ansible_hostname` deprecation warnings
-
-`playbooks/roles/k3s/tasks/update.yml` and `remove-node.yml` use `ansible_hostname` (the top-level fact form). ansible-core 2.24 will require `ansible_facts['hostname']` instead. Non-blocking; swap when convenient.
 
 ### kube-vip address shows `deprecated` flag
 

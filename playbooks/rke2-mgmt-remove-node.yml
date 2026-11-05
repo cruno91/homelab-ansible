@@ -29,7 +29,7 @@
   hosts: "{{ groups['rke2-mgmt'] | reject('equalto', target_node) | list | first }}"  # noqa: syntax-check[specific]
   gather_facts: false
   vars:
-    rke2_node_name: "{{ hostvars[target_node].ansible_hostname }}"
+    rke2_node_name: "{{ hostvars[target_node].ansible_facts['hostname'] }}"
   tasks:
     - name: Drain {{ rke2_node_name }}
       ansible.builtin.command: >-

@@ -12,13 +12,13 @@
 # Delegated to the helper node because this node's own API may be the one still
 # settling.
 
-- name: Wait for {{ ansible_hostname }} control-plane static pods to be Ready
+- name: Wait for {{ ansible_facts['hostname'] }} control-plane static pods to be Ready
   ansible.builtin.command: >-
     {{ rke2_bin_dir }}/kubectl -n kube-system wait --for=condition=Ready
-    pod/etcd-{{ ansible_hostname }}
-    pod/kube-apiserver-{{ ansible_hostname }}
-    pod/kube-controller-manager-{{ ansible_hostname }}
-    pod/kube-scheduler-{{ ansible_hostname }}
+    pod/etcd-{{ ansible_facts['hostname'] }}
+    pod/kube-apiserver-{{ ansible_facts['hostname'] }}
+    pod/kube-controller-manager-{{ ansible_facts['hostname'] }}
+    pod/kube-scheduler-{{ ansible_facts['hostname'] }}
     --timeout=600s
   environment:
     KUBECONFIG: "{{ rke2_kubeconfig_remote }}"
@@ -28,7 +28,7 @@
 
 - name: Wait for every etcd member to report healthy
   ansible.builtin.command: >-
-    {{ rke2_bin_dir }}/kubectl -n kube-system exec etcd-{{ ansible_hostname }} --
+    {{ rke2_bin_dir }}/kubectl -n kube-system exec etcd-{{ ansible_facts['hostname'] }} --
     etcdctl
     --cacert=/var/lib/rancher/rke2/server/tls/etcd/server-ca.crt
     --cert=/var/lib/rancher/rke2/server/tls/etcd/server-client.crt
@@ -49,7 +49,7 @@
     set -euo pipefail
     export KUBECONFIG={{ rke2_kubeconfig_remote }}
     K={{ rke2_bin_dir }}/kubectl
-    N={{ ansible_hostname }}
+    N={{ ansible_facts['hostname'] }}
     restarts() { $K -n kube-system get pod "etcd-$N" -o jsonpath='{.status.containerStatuses[0].restartCount}'; }
     start_restarts=$(restarts)
     end=$(( $(date +%s) + {{ rke2_settle_seconds }} ))
