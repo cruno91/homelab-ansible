@@ -1,7 +1,7 @@
 ---
 # Rolling K3s upgrade for one node. Caller play must use serial: 1.
 # Drains via a helper node, re-runs the install script (which restarts k3s),
-# waits for Ready, then uncordons.
+# waits for Ready and a settled etcd cluster, then uncordons.
 - name: Determine helper node for drain/uncordon
   ansible.builtin.set_fact:
     k3s_helper_node: "{{ (groups['k3s-edge'] | reject('equalto', inventory_hostname) | list)[0] | default('') }}"
@@ -80,6 +80,9 @@
   delegate_to: "{{ k3s_helper_node }}"
   become: true
   changed_when: false
+
+- name: Gate on etcd cluster health before uncordon
+  ansible.builtin.include_tasks: control-plane-settled.yml
 
 - name: Uncordon {{ ansible_hostname }}
   ansible.builtin.command: k3s kubectl uncordon {{ ansible_hostname }}
